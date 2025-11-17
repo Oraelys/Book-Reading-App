@@ -27,3 +27,27 @@ export interface ReadingProgress {
 export interface BookWithProgress extends Book {
   reading_progress?: ReadingProgress;
 }
+
+export interface BookComment {
+  id: string;
+  book_id: string;
+  user_id: string;
+  comment_text: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatRoom {
+  id: string;
+  name: string;
+  created_by: string;
+  created_at: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  room_id: string;
+  user_id: string;
+  message_text: string;
+  created_at: string;
+}

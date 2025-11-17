@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { BookOpen, Home, Plus } from 'lucide-react-native';
+import { BookOpen, Home, Plus, MessageCircle, PenTool } from 'lucide-react-native';
 
 export default function TabLayout() {
   return (
@@ -24,11 +24,27 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="create-novel"
+        options={{
+          title: 'Create Novel',
+          tabBarIcon: ({ size, color }) => <PenTool size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="library"
         options={{
           title: 'Library',
           tabBarIcon: ({ size, color }) => (
             <BookOpen size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="chat"
+        options={{
+          title: 'Chat',
+          tabBarIcon: ({ size, color }) => (
+            <MessageCircle size={size} color={color} />
           ),
         }}
       />

@@ -12,7 +12,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Book, ReadingProgress } from '@/types/database';
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, ChevronLeft, ChevronRight, MessageCircle } from 'lucide-react-native';
 
 export default function ReaderScreen() {
   const router = useRouter();
@@ -142,6 +142,12 @@ export default function ReaderScreen() {
             Page {currentPage} of {totalPages}
           </Text>
         </View>
+        <TouchableOpacity
+          onPress={() => router.push(`/book-comments?bookId=${bookId}&bookTitle=${encodeURIComponent(book.title)}`)}
+          style={styles.commentsButton}
+        >
+          <MessageCircle size={24} color="#007AFF" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -242,6 +248,10 @@ const styles = StyleSheet.create({
   },
   headerInfo: {
     flex: 1,
+  },
+  commentsButton: {
+    padding: 8,
+    marginLeft: 12,
   },
   bookTitle: {
     fontSize: 18,
