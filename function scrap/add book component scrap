@@ -1,0 +1,599 @@
+import React, { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  ScrollView,
+  Image,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import * as DocumentPicker from 'expo-document-picker';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+import { Upload, X, FileText, CheckCircle } from 'lucide-react-native';
+
+// Constants
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const ALLOWED_TYPES = ['application/pdf', 'application/epub+zip'];
+const CHUNK_SIZE = 1024 * 1024; // 1MB chunks for upload
+
+interface FilePreview {
+  name: string;
+  size: number;
+  type: string;
+  uri: string;
+  metadata?: {
+    title?: string;
+    author?: string;
+    pageCount?: number;
+    coverImage?: string;
+  };
+}
+
+export default function AddBookScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [selectedFiles, setSelectedFiles] = useState<FilePreview[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Validate file
+  const validateFile = (file: any): { valid: boolean; error?: string } => {
+    if (!file.name) {
+      return { valid: false, error: 'Invalid file name' };
+    }
+
+    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    if (!['pdf', 'epub'].includes(fileExtension || '')) {
+      return { valid: false, error: 'Only PDF and EPUB files are supported' };
+    }
+
+    if (file.size && file.size > MAX_FILE_SIZE) {
+      return { valid: false, error: `File size must be less than ${MAX_FILE_SIZE / 1024 / 1024}MB` };
+    }
+
+    if (file.mimeType && !ALLOWED_TYPES.includes(file.mimeType)) {
+      return { valid: false, error: 'Invalid file type' };
+    }
+
+    return { valid: true };
+  };
+
+  // Extract metadata from PDF (basic implementation)
+  const extractMetadata = async (fileUri: string, mimeType: string): Promise<any> => {
+    try {
+      // This is a placeholder for actual metadata extraction
+      // You would need libraries like react-native-pdf or epub.js for full implementation
+      const metadata: any = {
+        title: null,
+        author: null,
+        pageCount: 0,
+        coverImage: null,
+      };
+
+      // For PDF files, you could use react-native-pdf
+      if (mimeType === 'application/pdf') {
+        // Placeholder for PDF metadata extraction
+        // const pdfData = await Pdf.getInfo(fileUri);
+        // metadata.pageCount = pdfData.numberOfPages;
+        // metadata.title = pdfData.title;
+        // metadata.author = pdfData.author;
+      }
+
+      // For EPUB files, you could use epub.js
+      if (mimeType === 'application/epub+zip') {
+        // Placeholder for EPUB metadata extraction
+        // const book = ePub(fileUri);
+        // await book.ready;
+        // metadata.title = book.packaging.metadata.title;
+        // metadata.author = book.packaging.metadata.creator;
+      }
+
+      return metadata;
+    } catch (error) {
+      console.error('Error extracting metadata:', error);
+      return null;
+    }
+  };
+
+  // Upload file to Supabase Storage with progress tracking
+  const uploadToStorage = async (file: FilePreview): Promise<string> => {
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user?.id}/${Date.now()}.${fileExt}`;
+
+      console.log('Starting upload:', fileName, 'Size:', file.size, 'Type:', file.type);
+
+      // For both web and mobile, use fetch to get the file as blob/arraybuffer
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
+
+      console.log('File loaded as blob:', blob.size, blob.type);
+
+      const { data, error } = await supabase.storage
+        .from('books')
+        .upload(fileName, blob, {
+          contentType: file.type,
+          upsert: false,
+        });
+
+      if (error) {
+        console.error('Supabase storage error:', error);
+        throw error;
+      }
+      
+      console.log('Upload successful:', data.path);
+      return data.path;
+    } catch (error: any) {
+      console.error('Error uploading to storage:', error);
+      console.error('Error details:', error.message, error.statusCode);
+      throw new Error(`Failed to upload file: ${error.message || 'Unknown error'}`);
+    }
+  };
+
+
+
+  // Process and add files
+  const processFiles = async (files: any[]) => {
+    const validFiles: FilePreview[] = [];
+
+    for (const file of files) {
+      const validation = validateFile(file);
+      
+      if (!validation.valid) {
+        Alert.alert('Invalid File', `${file.name}: ${validation.error}`);
+        continue;
+      }
+
+      const metadata = await extractMetadata(file.uri, file.mimeType || 'application/pdf');
+
+      validFiles.push({
+        name: file.name,
+        size: file.size || 0,
+        type: file.mimeType || 'application/pdf',
+        uri: file.uri,
+        metadata,
+      });
+    }
+
+    setSelectedFiles((prev) => [...prev, ...validFiles]);
+  };
+
+  // Pick documents
+  const pickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ALLOWED_TYPES,
+        copyToCacheDirectory: true,
+        multiple: true,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      await processFiles(result.assets);
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document. Please try again.');
+    }
+  };
+
+  // Remove file from selection
+  const removeFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Upload all selected files
+  const uploadFiles = async () => {
+    if (selectedFiles.length === 0) {
+      Alert.alert('No Files', 'Please select at least one file to upload.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setUploadProgress(0);
+
+      const totalFiles = selectedFiles.length;
+      let uploadedCount = 0;
+
+      for (const file of selectedFiles) {
+        try {
+          // Upload to Supabase Storage
+          const storagePath = await uploadToStorage(file);
+
+          // Get public URL
+          const { data: urlData } = supabase.storage
+            .from('books')
+            .getPublicUrl(storagePath);
+
+          // Insert book record
+          const { data: bookData, error: bookError } = await supabase
+            .from('books')
+            .insert({
+              user_id: user?.id,
+              title: file.metadata?.title || file.name.replace(/\.[^/.]+$/, ''),
+              author: file.metadata?.author || 'Unknown',
+              file_uri: urlData.publicUrl,
+              storage_path: storagePath,
+              total_pages: file.metadata?.pageCount || 0,
+              file_size: file.size,
+              mime_type: file.type,
+              cover_image: file.metadata?.coverImage,
+            })
+            .select()
+            .single();
+
+          if (bookError) throw bookError;
+
+          // Create reading progress record
+          await supabase.from('reading_progress').insert({
+            user_id: user?.id,
+            book_id: bookData.id,
+            current_page: 0,
+            progress_percentage: 0,
+          });
+
+          uploadedCount++;
+          setUploadProgress((uploadedCount / totalFiles) * 100);
+        } catch (error) {
+          console.error(`Error uploading ${file.name}:`, error);
+          Alert.alert('Upload Error', `Failed to upload ${file.name}`);
+        }
+      }
+
+      setLoading(false);
+      setUploadProgress(0);
+      setSelectedFiles([]);
+
+      Alert.alert(
+        'Success',
+        `${uploadedCount} book${uploadedCount !== 1 ? 's' : ''} added successfully!`
+      );
+
+      router.push('/(tabs)');
+    } catch (error) {
+      console.error('Error uploading files:', error);
+      setLoading(false);
+      setUploadProgress(0);
+      Alert.alert('Error', 'Failed to upload books. Please try again.');
+    }
+  };
+
+  // Web drag and drop handlers
+  const handleDragEnter = useCallback((e: any) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: any) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDragOver = useCallback((e: any) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback(async (e: any) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (Platform.OS === 'web' && e.dataTransfer?.files) {
+      const files = Array.from(e.dataTransfer.files).map((file: any) => ({
+        name: file.name,
+        size: file.size,
+        mimeType: file.type,
+        uri: URL.createObjectURL(file),
+      }));
+
+      await processFiles(files);
+    }
+  }, []);
+
+  // Format file size
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  // Create drop zone component for web
+  const DropZoneWrapper = Platform.OS === 'web' ? 'div' : View;
+  const dropZoneProps = Platform.OS === 'web' 
+    ? {
+        onDragEnter: handleDragEnter,
+        onDragOver: handleDragOver,
+        onDragLeave: handleDragLeave,
+        onDrop: handleDrop,
+      }
+    : {};
+
+  return (
+    <View style={styles.container}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+        {/* Drop Zone */}
+        <DropZoneWrapper
+          style={[
+            styles.dropZone,
+            isDragging && styles.dropZoneActive,
+          ]}
+          {...dropZoneProps}
+        >
+          <Upload size={64} color={isDragging ? '#34C759' : '#007AFF'} />
+          <Text style={styles.title}>Add Books</Text>
+          <Text style={styles.subtitle}>
+            {Platform.OS === 'web'
+              ? 'Drag and drop files here or click to browse'
+              : 'Select PDF or EPUB files from your device'}
+          </Text>
+
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={pickDocument}
+            disabled={loading}
+          >
+            <Text style={styles.buttonText}>Choose Files</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.hint}>
+            Supported formats: PDF, EPUB • Max size: {MAX_FILE_SIZE / 1024 / 1024}MB
+          </Text>
+        </DropZoneWrapper>
+
+        {/* Selected Files Preview */}
+        {selectedFiles.length > 0 && (
+          <View style={styles.filesContainer}>
+            <Text style={styles.filesTitle}>
+              Selected Files ({selectedFiles.length})
+            </Text>
+
+            {selectedFiles.map((file, index) => (
+              <View key={index} style={styles.fileCard}>
+                <View style={styles.fileIcon}>
+                  <FileText size={24} color="#007AFF" />
+                </View>
+
+                <View style={styles.fileInfo}>
+                  <Text style={styles.fileName} numberOfLines={1}>
+                    {file.metadata?.title || file.name}
+                  </Text>
+                  {file.metadata?.author && (
+                    <Text style={styles.fileAuthor} numberOfLines={1}>
+                      by {file.metadata.author}
+                    </Text>
+                  )}
+                  <View style={styles.fileDetails}>
+                    <Text style={styles.fileSize}>{formatFileSize(file.size)}</Text>
+                    {file.metadata?.pageCount ? (
+                      <>
+                        <Text style={styles.fileDivider}>•</Text>
+                        <Text style={styles.filePages}>
+                          {file.metadata.pageCount} pages
+                        </Text>
+                      </>
+                    ) : null}
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.removeButton}
+                  onPress={() => removeFile(index)}
+                  disabled={loading}
+                >
+                  <X size={20} color="#FF3B30" />
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            {/* Upload Progress */}
+            {loading && (
+              <View style={styles.progressContainer}>
+                <View style={styles.progressBar}>
+                  <View
+                    style={[styles.progressFill, { width: `${uploadProgress}%` }]}
+                  />
+                </View>
+                <Text style={styles.progressText}>
+                  Uploading... {Math.round(uploadProgress)}%
+                </Text>
+              </View>
+            )}
+
+            {/* Upload Button */}
+            <TouchableOpacity
+              style={[styles.uploadButton, loading && styles.buttonDisabled]}
+              onPress={uploadFiles}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <CheckCircle size={20} color="#fff" />
+                  <Text style={styles.uploadButtonText}>
+                    Upload {selectedFiles.length} Book{selectedFiles.length !== 1 ? 's' : ''}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    padding: 24,
+  },
+  dropZone: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#E5E5E5',
+    borderStyle: 'dashed',
+    padding: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  dropZoneActive: {
+    borderColor: '#34C759',
+    backgroundColor: '#F0FFF4',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginTop: 24,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 32,
+    paddingHorizontal: 16,
+  },
+  button: {
+    paddingHorizontal: 32,
+    height: 50,
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  hint: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  filesContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+  },
+  filesTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 16,
+  },
+  fileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#F9F9F9',
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  fileIcon: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#E3F2FD',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  fileInfo: {
+    flex: 1,
+  },
+  fileName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 4,
+  },
+  fileAuthor: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  fileDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  fileSize: {
+    fontSize: 12,
+    color: '#999',
+  },
+  fileDivider: {
+    fontSize: 12,
+    color: '#999',
+    marginHorizontal: 8,
+  },
+  filePages: {
+    fontSize: 12,
+    color: '#999',
+  },
+  removeButton: {
+    padding: 8,
+  },
+  progressContainer: {
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: '#E5E5E5',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#34C759',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  uploadButton: {
+    height: 50,
+    backgroundColor: '#34C759',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  uploadButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+});
