@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Upload } from 'lucide-react-native';
@@ -53,17 +53,17 @@ export default function AddBookScreen() {
       }
 
       const { data, error } = await supabase
-        .from('books')
-        .insert({
-          user_id: user?.id,
-          title: fileName.replace(/\.[^/.]+$/, ''),
-          file_uri: fileUri,
-          total_pages: 0,
-          file_size: fileSize,
-          mime_type: mimeType,
-        })
-        .select()
-        .single();
+      .from('novels')
+      .insert({
+       user_id: user?.id,
+       title: fileName.replace(/\.[^/.]+$/, ''),
+       file_uri: fileUri,  // Changed from file_uri
+       total_pages: 0,
+       file_size: fileSize,      // Changed from file_size
+       type: mimeType,      // Changed from mime_type
+    })
+       .select()
+       .single();
 
       if (error) throw error;
 
@@ -81,7 +81,8 @@ export default function AddBookScreen() {
       }
 
       router.push('/(tabs)');
-    } catch (error) {
+    } 
+    catch (error) {
       console.error('Error picking document:', error);
       setLoading(false);
       if (Platform.OS === 'web') {

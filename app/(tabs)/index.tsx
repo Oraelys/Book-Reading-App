@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -19,6 +20,7 @@ export default function HomeScreen() {
   const { user, signOut } = useAuth();
   const [recentBooks, setRecentBooks] = useState<BookWithProgress[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadRecentBooks();
@@ -29,10 +31,10 @@ export default function HomeScreen() {
 
     try {
       const { data: booksData, error: booksError } = await supabase
-        .from('books')
+        .from('novels')
         .select('*')
         .eq('user_id', user.id)
-        .order('last_opened_at', { ascending: false, nullsFirst: false })
+        .order('last_opened', { ascending: false, nullsFirst: false })
         .limit(5);
 
       if (booksError) throw booksError;
@@ -53,12 +55,20 @@ export default function HomeScreen() {
         }));
 
         setRecentBooks(booksWithProgress);
+      } else {
+        setRecentBooks([]);
       }
     } catch (error) {
       console.error('Error loading recent books:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadRecentBooks();
+    setRefreshing(false);
   };
 
   const handleSignOut = async () => {
@@ -129,13 +139,27 @@ export default function HomeScreen() {
       </View>
 
       {recentBooks.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <BookOpen size={64} color="#ccc" />
-          <Text style={styles.emptyTitle}>No books yet</Text>
-          <Text style={styles.emptyText}>
-            Add your first book to start reading
-          </Text>
-        </View>
+        <FlatList
+          data={[]}
+          renderItem={null}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <BookOpen size={64} color="#ccc" />
+              <Text style={styles.emptyTitle}>No books yet</Text>
+              <Text style={styles.emptyText}>
+                Add your first book to start reading
+              </Text>
+            </View>
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#007AFF"
+              colors={['#007AFF']}
+            />
+          }
+        />
       ) : (
         <>
           <Text style={styles.sectionTitle}>Continue Reading</Text>
@@ -144,6 +168,14 @@ export default function HomeScreen() {
             renderItem={renderBookItem}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor="#007AFF"
+                colors={['#007AFF']}
+              />
+            }
           />
         </>
       )}
@@ -253,6 +285,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
+    paddingTop: 100,
   },
   emptyTitle: {
     fontSize: 20,

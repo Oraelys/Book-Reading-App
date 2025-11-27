@@ -27,16 +27,16 @@ BEGIN
 
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'books' AND column_name = 'mime_type'
+    WHERE table_name = 'novels' AND column_name = 'mime_type'
   ) THEN
-    ALTER TABLE books ADD COLUMN mime_type text DEFAULT '';
+    ALTER TABLE novels ADD COLUMN mime_type text DEFAULT '';
   END IF;
 
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'books' AND column_name = 'created_at'
+    WHERE table_name = 'novels' AND column_name = 'created_at'
   ) THEN
-    ALTER TABLE books ADD COLUMN created_at timestamptz DEFAULT now();
+    ALTER TABLE novels ADD COLUMN created_at timestamptz DEFAULT now();
   END IF;
 END $$;
 
@@ -59,5 +59,5 @@ BEGIN
 END $$;
 
 -- Create indexes if they don't exist
-CREATE INDEX IF NOT EXISTS idx_books_user_created ON books(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_novels_user_created ON novels(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_reading_progress_last_read ON reading_progress(user_id, last_read_at DESC);
