@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Book, ReadingProgress } from '@/types/database';
 import { ArrowLeft, ChevronLeft, ChevronRight, MessageCircle } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ReaderScreen() {
   const router = useRouter();
@@ -130,6 +131,7 @@ export default function ReaderScreen() {
 
   return (
     <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#1a1a1a" />
@@ -219,6 +221,7 @@ export default function ReaderScreen() {
           </TouchableOpacity>
         </View>
       </View>
+      </SafeAreaView >
     </View>
   );
 }

@@ -9,6 +9,7 @@ import {
   Image,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -77,6 +78,7 @@ export default function HomeScreen() {
   };
 
   const renderBookItem = ({ item }: { item: BookWithProgress }) => (
+    
     <TouchableOpacity
       style={styles.bookCard}
       onPress={() => router.push(`/reader?bookId=${item.id}`)}
@@ -127,7 +129,9 @@ export default function HomeScreen() {
   }
 
   return (
+    
     <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Welcome back</Text>
@@ -179,7 +183,9 @@ export default function HomeScreen() {
           />
         </>
       )}
+      </SafeAreaView >
     </View>
+    
   );
 }
 
@@ -187,7 +193,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-    paddingTop: 60,
+    
   },
   centerContainer: {
     flex: 1,

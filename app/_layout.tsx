@@ -13,33 +13,50 @@ function RootLayoutNav() {
   const { user, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
-  const [isNavigationReady, setIsNavigationReady] = useState(false);
+  const [appIsReady, setAppIsReady] = useState(false);
 
   useEffect(() => {
-    if (loading) return;
+    async function prepare() {
+      try {
+        // Wait for auth to load
+        if (loading) return;
+        
+        // Wait minimum 2 seconds for splash screen
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        setAppIsReady(true);
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    prepare();
+  }, [loading]);
+
+  useEffect(() => {
+    if (!appIsReady) return;
 
     const inAuthGroup = segments[0] === '(tabs)';
     const inAuth = segments[0] === 'login' || segments[0] === 'register';
-    
-    // The splash screen (index) will handle its own navigation
-    // We only need to protect tab routes when user is not authenticated
-    if (!user && inAuthGroup) {
+
+    console.log('Navigation check:', { user: !!user, segments, appIsReady });
+
+    // Navigate from splash screen
+    if (!user && !inAuth) {
+      console.log('Navigating to login');
       router.replace('/login');
     } else if (user && !inAuthGroup && !inAuth && segments[0] !== 'reader' && segments[0] !== 'book-comments') {
+      console.log('Navigating to tabs');
       router.replace('/(tabs)');
     }
 
-    setIsNavigationReady(true);
-
-    // Hide the native splash after a short delay
-    setTimeout(() => {
-      SplashScreen.hideAsync();
-    }, 100);
-  }, [user, loading, segments]);
+    // Hide the native splash
+    SplashScreen.hideAsync();
+  }, [appIsReady, user, segments]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="index" />
       <Stack.Screen name="login" />
       <Stack.Screen name="register" />
       <Stack.Screen name="(tabs)" />

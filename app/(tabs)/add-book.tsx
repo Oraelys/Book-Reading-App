@@ -8,6 +8,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -93,6 +94,7 @@ export default function AddBookScreen() {
 
   return (
     <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.content}>
         <Upload size={64} color="#007AFF" />
         <Text style={styles.title}>Add a Book</Text>
@@ -116,6 +118,7 @@ export default function AddBookScreen() {
           Supported formats: PDF, EPUB
         </Text>
       </View>
+      </SafeAreaView >
     </View>
   );
 }

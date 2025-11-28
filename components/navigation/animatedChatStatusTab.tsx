@@ -1,7 +1,7 @@
 // /components/navigation/AnimatedChatStatusTab.tsx
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, SafeAreaView } from 'react-native';
-
+import { View, Text, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MessageCircle, User } from 'lucide-react-native';
 
 import {navStyles} from  '@/styles/navStyles';
