@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { BookOpen, Home, Plus, MessageCircle, PenTool, Settings } from 'lucide-react-native';
+import { BookOpen, Home, Plus, MessageCircle, PenTool, Settings, User } from 'lucide-react-native';
 
 
 export default function TabLayout() {
@@ -17,11 +17,13 @@ export default function TabLayout() {
           tabBarIcon: ({ size, color }) => <Home size={size} color={color} />,
         }}
       />
-      <Tabs.Screen
-        name="add-book"
+    <Tabs.Screen
+        name="library-screen"
         options={{
-          title: 'Add Book',
-          tabBarIcon: ({ size, color }) => <Plus size={size} color={color} />,
+          title: 'Library',
+          tabBarIcon: ({ size, color }) => (
+            <BookOpen size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -31,15 +33,7 @@ export default function TabLayout() {
           tabBarIcon: ({ size, color }) => <PenTool size={size} color={color} />,
         }}
       />
-      <Tabs.Screen
-        name="library"
-        options={{
-          title: 'Library',
-          tabBarIcon: ({ size, color }) => (
-            <BookOpen size={size} color={color} />
-          ),
-        }}
-      />
+      
       <Tabs.Screen
         name="social"
         options={{
@@ -50,11 +44,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="settings"
+        name="profile-screen"
         options={{
-          title: 'Settings',
+          title: 'Profile',
           tabBarIcon: ({ size, color }) => (
-            <Settings size={size} color={color} />
+            <User size={size} color={color} />
           ),
         }}
       />
