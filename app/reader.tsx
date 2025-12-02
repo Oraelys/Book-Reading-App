@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,12 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  PanResponder,
+  Animated,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react-native';
-import * as FileSystem from 'expo-file-system';
 import { getLocalBookById, saveLocalBook } from '@/lib/localBooks';
 import { LocalBook } from '@/lib/local-books-type';
 
@@ -25,6 +26,90 @@ export default function ReaderScreen() {
   const [currentPage, setCurrentPage] = useState(0);
   const [pages, setPages] = useState<string[]>([]);
   const [error, setError] = useState<string>('');
+  
+  // Swipe gesture handling
+  const pan = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  // Load books from storage or initialize with dummy data
+  const loadBooks = async () => {
+    let storedBooks = await getLocalBookById(bookId);
+    if (!storedBooks || storedBooks.length === 0) {
+      // Initialize with dummy books
+      for (let book of DUMMY_BOOKS) {
+        await saveLocalBook(book);
+      }
+      storedBooks = DUMMY_BOOKS;
+    }
+    setBook(storedBooks);
+    setLoading(false);
+  };
+
+  // Swipe gesture handler
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Only respond to horizontal swipes
+        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 10;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // Prevent swiping past boundaries
+        if ((currentPage === 0 && gestureState.dx > 0) || 
+            (currentPage >= pages.length - 1 && gestureState.dx < 0)) {
+          return;
+        }
+        pan.setValue(gestureState.dx);
+        
+        // Fade effect during swipe
+        const fadeValue = 1 - Math.abs(gestureState.dx) / 300;
+        opacity.setValue(Math.max(0.3, fadeValue));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        const swipeThreshold = 75;
+        
+        if (gestureState.dx > swipeThreshold && currentPage > 0) {
+          // Swipe right - previous page
+          animatePageChange(() => handlePreviousPage());
+        } else if (gestureState.dx < -swipeThreshold && currentPage < pages.length - 1) {
+          // Swipe left - next page
+          animatePageChange(() => handleNextPage());
+        } else {
+          // Reset if swipe wasn't strong enough
+          Animated.parallel([
+            Animated.spring(pan, {
+              toValue: 0,
+              useNativeDriver: true,
+              friction: 8,
+            }),
+            Animated.timing(opacity, {
+              toValue: 1,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+          ]).start();
+        }
+      },
+    })
+  ).current;
+
+  const animatePageChange = (callback: () => void) => {
+    Animated.parallel([
+      Animated.timing(pan, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      callback();
+      opacity.setValue(1);
+    });
+  };
 
   // Load book and read file content
   useEffect(() => {
@@ -59,15 +144,9 @@ export default function ReaderScreen() {
       // Read file content directly from device
       await readFileContent(bookData);
       
-      // Set current page based on saved progress
-      const startPage = bookData.progress 
-        ? Math.round(bookData.progress * (pages.length || 1))
-        : 0;
-      setCurrentPage(startPage);
-      
     } catch (error) {
       console.error('Error loading book:', error);
-      setError(`Error loading book: ${error.message}`);
+      // setError(`Error loading book: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -77,19 +156,27 @@ export default function ReaderScreen() {
     try {
       const { fileUri, mimeType } = bookData;
 
-      // Check if file exists
-      const fileInfo = await FileSystem.getInfoAsync(fileUri);
-      
-      if (!fileInfo.exists) {
-        throw new Error('File no longer exists at the original location');
-      }
-
       console.log('Reading file from:', fileUri);
 
       // Handle different file types
       if (mimeType === 'text/plain' || fileUri.endsWith('.txt')) {
-        // Read text files directly
-        const content = await FileSystem.readAsStringAsync(fileUri);
+        // Read text files directly using fetch for content:// URIs
+        let content: string;
+        
+        if (fileUri.startsWith('content://')) {
+          // For Android content URIs, use fetch
+          const response = await fetch(fileUri);
+          content = await response.text();
+        } else if (fileUri.startsWith('file://')) {
+          // For file:// URIs, use fetch
+          const response = await fetch(fileUri);
+          content = await response.text();
+        } else {
+          // Fallback: try fetch anyway
+          const response = await fetch(fileUri);
+          content = await response.text();
+        }
+        
         console.log('File content length:', content.length);
         
         // Split into pages (roughly 1000 characters per page)
@@ -97,15 +184,47 @@ export default function ReaderScreen() {
         setPages(pagesArray);
         setFileContent(content);
         
+        // Set current page based on saved progress AFTER pages are set
+        const startPage = bookData.progress 
+          ? Math.round(bookData.progress * pagesArray.length)
+          : 0;
+        setCurrentPage(Math.min(startPage, pagesArray.length - 1));
+        
       } else if (mimeType === 'application/pdf' || fileUri.endsWith('.pdf')) {
         // For PDF files
-        setPages(['PDF Preview', 'This is a PDF file. PDF rendering requires react-native-pdf library.', 'Install: npm install react-native-pdf', 'Then implement proper PDF rendering.']);
+        const pdfPages = [
+          'PDF Preview', 
+          'This is a PDF file. PDF rendering requires react-native-pdf library.', 
+          'Install: npm install react-native-pdf', 
+          'Then implement proper PDF rendering.',
+          '',
+          'File location: ' + fileUri
+        ];
+        setPages(pdfPages);
         setFileContent('PDF file loaded from: ' + fileUri);
+        
+        const startPage = bookData.progress 
+          ? Math.round(bookData.progress * pdfPages.length)
+          : 0;
+        setCurrentPage(Math.min(startPage, pdfPages.length - 1));
         
       } else if (mimeType === 'application/epub+zip' || fileUri.endsWith('.epub')) {
         // For EPUB files
-        setPages(['EPUB Preview', 'This is an EPUB file. EPUB rendering requires @epubjs-react-native/core library.', 'Install: npm install @epubjs-react-native/core', 'Then implement proper EPUB rendering.']);
+        const epubPages = [
+          'EPUB Preview', 
+          'This is an EPUB file. EPUB rendering requires @epubjs-react-native/core library.', 
+          'Install: npm install @epubjs-react-native/core', 
+          'Then implement proper EPUB rendering.',
+          '',
+          'File location: ' + fileUri
+        ];
+        setPages(epubPages);
         setFileContent('EPUB file loaded from: ' + fileUri);
+        
+        const startPage = bookData.progress 
+          ? Math.round(bookData.progress * epubPages.length)
+          : 0;
+        setCurrentPage(Math.min(startPage, epubPages.length - 1));
         
       } else {
         throw new Error(`Unsupported file type: ${mimeType}`);
@@ -114,10 +233,16 @@ export default function ReaderScreen() {
     } catch (error) {
       console.error('Error reading file:', error);
       
-      if (error.message.includes('no longer exists')) {
+      if (error.message?.includes('no longer exists') || error.message?.includes('not found')) {
         Alert.alert(
           'File Not Found',
           'The original file has been moved or deleted. Please re-add it to your library.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      } else if (error.message?.includes('Failed to fetch')) {
+        Alert.alert(
+          'File Access Error',
+          'Unable to access the file. It may have been moved or you may need to grant permissions.',
           [{ text: 'OK', onPress: () => router.back() }]
         );
       }
@@ -211,9 +336,17 @@ export default function ReaderScreen() {
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <Text style={styles.pageContent}>
-            {pages[currentPage] || 'Content not available'}
-          </Text>
+          <Animated.View
+            style={{
+              opacity: opacity,
+              transform: [{ translateX: pan }],
+            }}
+            {...panResponder.panHandlers}
+          >
+            <Text style={styles.pageContent}>
+              {pages[currentPage] || 'Content not available'}
+            </Text>
+          </Animated.View>
         </ScrollView>
 
         <View style={styles.footer}>

@@ -5,7 +5,6 @@ export type LocalBook = {
   mimeType: string;
   fileSize: number;
   createdAt: string;
-
   // Add optional reading progress
   progress?: number; // 0 = start, 1 = finished
 };

@@ -42,6 +42,7 @@ export default function LibraryWithAddBook() {
   const router = useRouter();
   const [books, setBooks] = useState<LocalBook[]>([]);
   const [loading, setLoading] = useState(true);
+ 
 
   // Load books from storage or initialize with dummy data
   const loadBooks = async () => {
@@ -106,11 +107,7 @@ export default function LibraryWithAddBook() {
 
   const handleOpenBook = (book: LocalBook) => {
     // Navigate to your reader screen and pass URI and progress
-    router.push(
-      `/reader?path=${encodeURIComponent(book.fileUri)}&title=${encodeURIComponent(
-        book.title
-      )}&progress=${book.progress ?? 0}`
-    );
+    router.push(`/reader?bookId=${book.id}`);
   };
 
   if (loading) {
