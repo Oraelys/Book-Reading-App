@@ -38,6 +38,9 @@ function RootLayoutNav() {
 
     const inAuthGroup = segments[0] === '(tabs)';
     const inAuth = segments[0] === 'login' || segments[0] === 'register';
+    const inBookDetails = segments[0] === 'book-details';
+    const inReader = segments[0] === 'reader';
+    const inBookComments = segments[0] === 'book-comments';
 
     console.log('Navigation check:', { user: !!user, segments, appIsReady });
 
@@ -45,7 +48,7 @@ function RootLayoutNav() {
     if (!user && !inAuth) {
       console.log('Navigating to login');
       router.replace('/login');
-    } else if (user && !inAuthGroup && !inAuth && segments[0] !== 'reader' && segments[0] !== 'book-comments') {
+    } else if (user && !inAuthGroup && !inAuth && !inBookDetails && !inReader && !inBookComments) {
       console.log('Navigating to tabs');
       router.replace('/(tabs)');
     }
@@ -62,6 +65,7 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="reader" />
       <Stack.Screen name="book-comments" />
+      <Stack.Screen name="book-details" />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

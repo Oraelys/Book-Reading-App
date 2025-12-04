@@ -14,8 +14,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { BookWithProgress } from '@/types/database';
-import { BookOpen, TrendingUp, Clock, Star } from 'lucide-react-native';
+import { BookOpen, TrendingUp, Star } from 'lucide-react-native';
+
+interface Novel {
+  id: string;
+  title: string;
+  author: string;
+  description: string;
+  category: string;
+  cover_image_url: string;
+  rating: number;
+  total_ratings: number;
+  views: number;
+  reading_progress?: {
+    progress_percentage: number;
+    current_page: number;
+  };
+}
 
 interface UserProfile {
   username: string;
@@ -26,15 +41,27 @@ export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [recentBooks, setRecentBooks] = useState<BookWithProgress[]>([]);
-  const [popularBooks, setPopularBooks] = useState<BookWithProgress[]>([]);
+  const [continueReading, setContinueReading] = useState<Novel[]>([]);
+  const [featuredBooks, setFeaturedBooks] = useState<Novel[]>([]);
+  const [popularBooks, setPopularBooks] = useState<Novel[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState('All');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [readingGoal, setReadingGoal] = useState({ current: 3, total: 10 });
+  const [readingGoal, setReadingGoal] = useState({ current: 0, total: 10 });
+
+  const categories = ['All', 'Romance', 'Mystery', 'Fantasy', 'Sci-Fi', 'Thriller'];
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (selectedCategory !== 'All') {
+      loadBooksByCategory(selectedCategory);
+    } else {
+      loadFeaturedBooks();
+    }
+  }, [selectedCategory]);
 
   const loadData = async () => {
     if (!user) return;
@@ -51,35 +78,17 @@ export default function HomeScreen() {
         setProfile(profileData);
       }
 
-      // Load recent books
-      const { data: booksData, error: booksError } = await supabase
-        .from('novels')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('last_opened', { ascending: false, nullsFirst: false })
-        .limit(3);
+      // Load books user is currently reading
+      await loadContinueReading();
+      
+      // Load featured books
+      await loadFeaturedBooks();
+      
+      // Load popular books
+      await loadPopularBooks();
 
-      if (booksError) throw booksError;
-
-      if (booksData && booksData.length > 0) {
-        const bookIds = booksData.map((book) => book.id);
-
-        const { data: progressData } = await supabase
-          .from('reading_progress')
-          .select('*')
-          .in('book_id', bookIds);
-
-        const booksWithProgress = booksData.map((book) => ({
-          ...book,
-          reading_progress: progressData?.find((p) => p.book_id === book.id),
-        }));
-
-        setRecentBooks(booksWithProgress);
-      }
-
-      // Load popular books (mock data for now)
-      // In production, you'd fetch this from a trending/popular table
-      setPopularBooks([]);
+      // Calculate reading goal
+      await calculateReadingGoal();
 
     } catch (error) {
       console.error('Error loading data:', error);
@@ -88,25 +97,151 @@ export default function HomeScreen() {
     }
   };
 
+  const loadContinueReading = async () => {
+    if (!user) return;
+
+    try {
+      // Get books with reading progress
+      const { data: progressData } = await supabase
+        .from('reading_progress')
+        .select(`
+          book_id,
+          progress_percentage,
+          current_page,
+          novels:book_id (
+            id,
+            title,
+            author,
+            description,
+            category,
+            cover_image_url,
+            rating,
+            total_ratings,
+            views
+          )
+        `)
+        .eq('user_id', user.id)
+        .gt('progress_percentage', 0)
+        .lt('progress_percentage', 100)
+        .order('last_read', { ascending: false })
+        .limit(3);
+
+      if (progressData) {
+        const books = progressData
+          .filter(item => item.novels)
+          .map(item => ({
+            ...(item.novels as any),
+            reading_progress: {
+              progress_percentage: item.progress_percentage,
+              current_page: item.current_page,
+            },
+          }));
+        setContinueReading(books);
+      }
+    } catch (error) {
+      console.error('Error loading continue reading:', error);
+    }
+  };
+
+  const loadFeaturedBooks = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('novels')
+        .select('id, title, author, description, category, cover_image_url, rating, total_ratings, views')
+        .eq('is_featured', true)
+        .eq('is_public', true)
+        .order('views', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setFeaturedBooks(data || []);
+    } catch (error) {
+      console.error('Error loading featured books:', error);
+    }
+  };
+
+  const loadPopularBooks = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('novels')
+        .select('id, title, author, description, category, cover_image_url, rating, total_ratings, views')
+        .eq('is_public', true)
+        .order('views', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setPopularBooks(data || []);
+    } catch (error) {
+      console.error('Error loading popular books:', error);
+    }
+  };
+
+  const loadBooksByCategory = async (category: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('novels')
+        .select('id, title, author, description, category, cover_image_url, rating, total_ratings, views')
+        .eq('category', category)
+        .eq('is_public', true)
+        .order('rating', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setFeaturedBooks(data || []);
+    } catch (error) {
+      console.error('Error loading books by category:', error);
+    }
+  };
+
+  const calculateReadingGoal = async () => {
+    if (!user) return;
+
+    try {
+      const { count } = await supabase
+        .from('reading_progress')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('progress_percentage', 100);
+
+      setReadingGoal({ current: count || 0, total: 10 });
+    } catch (error) {
+      console.error('Error calculating reading goal:', error);
+    }
+  };
+
+  const handleBookPress = async (bookId: string) => {
+    // Increment views
+    try {
+      await supabase.rpc('increment_book_views', { book_id: bookId });
+    } catch (error) {
+      console.error('Error incrementing views:', error);
+    }
+
+    console.log('Navigating to book details:', bookId);
+    // Navigate to book details
+    router.push({
+      pathname: '/book-details',
+      params: { bookId: bookId }
+    } as any);
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadData();
     setRefreshing(false);
   };
 
-  const renderBookCard = ({ item }: { item: BookWithProgress }) => (
+  const renderBookCard = ({ item }: { item: Novel }) => (
     <TouchableOpacity
       style={styles.bookCard}
-      onPress={() => router.push(`/reader?bookId=${item.id}`)}
+      onPress={() => handleBookPress(item.id)}
     >
       <View style={styles.bookCoverContainer}>
-        {item.cover_image ? (
-          <Image source={{ uri: item.cover_image }} style={styles.bookCover} />
-        ) : (
-          <View style={styles.bookCoverPlaceholder}>
-            <BookOpen size={32} color="#999" />
-          </View>
-        )}
+        <Image 
+          source={{ uri: item.cover_image_url }} 
+          style={styles.bookCover}
+          defaultSource={require('@/assets/images/book-placeholder.png')}
+        />
         {item.reading_progress && item.reading_progress.progress_percentage > 0 && (
           <View style={styles.readBadge}>
             <Text style={styles.readBadgeText}>
@@ -114,48 +249,51 @@ export default function HomeScreen() {
             </Text>
           </View>
         )}
+        <View style={styles.ratingBadge}>
+          <Star size={12} color="#FFD700" fill="#FFD700" />
+          <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
+        </View>
       </View>
       <Text style={styles.bookCardTitle} numberOfLines={2}>
         {item.title}
       </Text>
-      {item.author && (
-        <Text style={styles.bookCardAuthor} numberOfLines={1}>
-          {item.author}
-        </Text>
-      )}
+      <Text style={styles.bookCardAuthor} numberOfLines={1}>
+        {item.author}
+      </Text>
     </TouchableOpacity>
   );
 
-  const renderSmallBookCard = ({ item }: { item: BookWithProgress }) => (
+  const renderContinueReadingCard = ({ item }: { item: Novel }) => (
     <TouchableOpacity
-      style={styles.smallBookCard}
-      onPress={() => router.push(`/reader?bookId=${item.id}`)}
+      style={styles.continueCard}
+      onPress={() => handleBookPress(item.id)}
     >
-      <View style={styles.smallBookCover}>
-        {item.cover_image ? (
-          <Image source={{ uri: item.cover_image }} style={styles.smallCoverImage} />
-        ) : (
-          <BookOpen size={24} color="#999" />
-        )}
-      </View>
-      <View style={styles.smallBookInfo}>
-        <Text style={styles.smallBookTitle} numberOfLines={2}>
+      <Image 
+        source={{ uri: item.cover_image_url }} 
+        style={styles.continueCover}
+        defaultSource={require('@/assets/images/book-placeholder.png')}
+      />
+      <View style={styles.continueInfo}>
+        <Text style={styles.continueTitle} numberOfLines={2}>
           {item.title}
         </Text>
-        {item.author && (
-          <Text style={styles.smallBookAuthor} numberOfLines={1}>
-            {item.author}
-          </Text>
-        )}
+        <Text style={styles.continueAuthor} numberOfLines={1}>
+          {item.author}
+        </Text>
         {item.reading_progress && (
-          <View style={styles.smallProgressBar}>
-            <View
-              style={[
-                styles.smallProgressFill,
-                { width: `${item.reading_progress.progress_percentage}%` },
-              ]}
-            />
-          </View>
+          <>
+            <View style={styles.progressBar}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${item.reading_progress.progress_percentage}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.progressText}>
+              {Math.round(item.reading_progress.progress_percentage)}% complete
+            </Text>
+          </>
         )}
       </View>
     </TouchableOpacity>
@@ -230,7 +368,7 @@ export default function HomeScreen() {
                 <View
                   style={[
                     styles.goalBarFill,
-                    { width: `${progressPercentage}%` },
+                    { width: `${Math.min(progressPercentage, 100)}%` },
                   ]}
                 />
               </View>
@@ -242,17 +380,14 @@ export default function HomeScreen() {
         </View>
 
         {/* Continue Reading Section */}
-        {recentBooks.length > 0 && (
+        {continueReading.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Continue Reading</Text>
-              <TouchableOpacity onPress={() => router.push('/(tabs)/library-screen')}>
-                <Text style={styles.seeAll}>See All</Text>
-              </TouchableOpacity>
             </View>
             <FlatList
-              data={recentBooks}
-              renderItem={renderSmallBookCard}
+              data={continueReading}
+              renderItem={renderContinueReadingCard}
               keyExtractor={(item) => item.id}
               scrollEnabled={false}
               contentContainerStyle={styles.continueList}
@@ -263,51 +398,52 @@ export default function HomeScreen() {
         {/* Categories Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Categories</Text>
-          <View style={styles.categoryContainer}>
-            {['All', 'Romance', 'Mystery', 'Fantasy', 'Sci-Fi'].map((category) => (
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryContainer}
+          >
+            {categories.map((category) => (
               <TouchableOpacity
                 key={category}
                 style={[
                   styles.categoryChip,
-                  category === 'All' && styles.categoryChipActive,
+                  category === selectedCategory && styles.categoryChipActive,
                 ]}
+                onPress={() => setSelectedCategory(category)}
               >
                 <Text
                   style={[
                     styles.categoryText,
-                    category === 'All' && styles.categoryTextActive,
+                    category === selectedCategory && styles.categoryTextActive,
                   ]}
                 >
                   {category}
                 </Text>
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
         </View>
 
-        {/* Popular Books Section */}
+        {/* Featured/Category Books Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Popular Books</Text>
-            <TouchableOpacity>
+            <Text style={styles.sectionTitle}>
+              {selectedCategory === 'All' ? 'Featured Books' : selectedCategory}
+            </Text>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/library-screen')}>
               <Text style={styles.seeAll}>See All</Text>
             </TouchableOpacity>
           </View>
           
-          {popularBooks.length === 0 ? (
+          {featuredBooks.length === 0 ? (
             <View style={styles.emptyPopular}>
-              <TrendingUp size={48} color="#ddd" />
-              <Text style={styles.emptyText}>No popular books yet</Text>
-              <TouchableOpacity 
-                style={styles.exploreButton}
-                onPress={() => router.push('/(tabs)/library-screen')}
-              >
-                <Text style={styles.exploreButtonText}>Add Books</Text>
-              </TouchableOpacity>
+              <BookOpen size={48} color="#ddd" />
+              <Text style={styles.emptyText}>No books in this category yet</Text>
             </View>
           ) : (
             <FlatList
-              data={popularBooks}
+              data={featuredBooks}
               renderItem={renderBookCard}
               keyExtractor={(item) => item.id}
               horizontal
@@ -317,19 +453,40 @@ export default function HomeScreen() {
           )}
         </View>
 
+        {/* Popular Books Section */}
+        {selectedCategory === 'All' && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Popular Books</Text>
+              <TouchableOpacity onPress={() => router.push('/(tabs)/library-screen')}>
+                <Text style={styles.seeAll}>See All</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <FlatList
+              data={popularBooks.slice(0, 5)}
+              renderItem={renderBookCard}
+              keyExtractor={(item) => item.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.popularList}
+            />
+          </View>
+        )}
+
         {/* Empty State */}
-        {recentBooks.length === 0 && (
+        {continueReading.length === 0 && featuredBooks.length === 0 && (
           <View style={styles.emptyState}>
             <BookOpen size={64} color="#ddd" />
-            <Text style={styles.emptyTitle}>Start Your Reading Journey</Text>
+            <Text style={styles.emptyTitle}>Discover Amazing Books</Text>
             <Text style={styles.emptySubtitle}>
-              Add your first book to begin
+              Browse our library to start your reading journey
             </Text>
             <TouchableOpacity
               style={styles.addBookButton}
               onPress={() => router.push('/(tabs)/library-screen')}
             >
-              <Text style={styles.addBookButtonText}>Add Book</Text>
+              <Text style={styles.addBookButtonText}>Browse Library</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -473,57 +630,54 @@ const styles = StyleSheet.create({
   continueList: {
     gap: 12,
   },
-  smallBookCard: {
+  continueCard: {
     flexDirection: 'row',
     backgroundColor: '#f8f8f8',
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
   },
-  smallBookCover: {
+  continueCover: {
     width: 60,
-    height: 80,
-    backgroundColor: '#e8e8e8',
+    height: 90,
     borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginRight: 12,
   },
-  smallCoverImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 8,
-  },
-  smallBookInfo: {
+  continueInfo: {
     flex: 1,
     justifyContent: 'center',
   },
-  smallBookTitle: {
+  continueTitle: {
     fontSize: 15,
     fontWeight: '600',
     color: '#1a1a1a',
     marginBottom: 4,
   },
-  smallBookAuthor: {
+  continueAuthor: {
     fontSize: 13,
     color: '#666',
     marginBottom: 8,
   },
-  smallProgressBar: {
+  progressBar: {
     height: 4,
     backgroundColor: '#e0e0e0',
     borderRadius: 2,
     overflow: 'hidden',
+    marginBottom: 4,
   },
-  smallProgressFill: {
+  progressFill: {
     height: '100%',
     backgroundColor: '#007AFF',
     borderRadius: 2,
   },
+  progressText: {
+    fontSize: 11,
+    color: '#666',
+  },
   categoryContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
+    paddingRight: 20,
   },
   categoryChip: {
     paddingHorizontal: 20,
@@ -544,6 +698,7 @@ const styles = StyleSheet.create({
   },
   popularList: {
     gap: 16,
+    paddingRight: 20,
   },
   bookCard: {
     width: 140,
@@ -557,14 +712,6 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 12,
   },
-  bookCoverPlaceholder: {
-    width: 140,
-    height: 200,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   readBadge: {
     position: 'absolute',
     top: 8,
@@ -575,6 +722,23 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   readBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  ratingBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  ratingText: {
     fontSize: 11,
     fontWeight: '700',
     color: '#fff',
@@ -597,18 +761,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999',
     marginTop: 12,
-    marginBottom: 16,
-  },
-  exploreButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  exploreButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
   },
   emptyState: {
     alignItems: 'center',
