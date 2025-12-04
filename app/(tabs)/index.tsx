@@ -397,7 +397,7 @@ export default function HomeScreen() {
 
         {/* Categories Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Categories</Text>
+          <Text style={styles.sectionTitle1}>Categories</Text>
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
@@ -615,6 +615,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle1: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a1a',
     marginBottom: 16,
   },
   sectionTitle: {

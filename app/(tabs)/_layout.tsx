@@ -7,7 +7,18 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#007AFF',
+        tabBarActiveTintColor: '#0077ffff',
+        tabBarInactiveTintColor: '#666',
+        tabBarStyle: {
+          paddingTop: 8,
+          paddingBottom: 8,
+          height: 65,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
+          marginTop: 4,
+        },
       }}
     >
       <Tabs.Screen
@@ -29,7 +40,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="create-novel"
         options={{
-          title: 'Create Novel',
+          title: 'Create',
           tabBarIcon: ({ size, color }) => <PenTool size={size} color={color} />,
         }}
       />

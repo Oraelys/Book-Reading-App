@@ -80,11 +80,11 @@ export default function SplashScreen() {
         <Text style={styles.subtitle}>Your Reading Companion</Text>
       </Animated.View>
 
-      <Animated.View style={[styles.dotsContainer, { opacity: fadeAnim }]}>
+      {/* <Animated.View style={[styles.dotsContainer, { opacity: fadeAnim }]}>
         <View style={styles.dot} />
         <View style={[styles.dot, styles.dotDelay1]} />
         <View style={[styles.dot, styles.dotDelay2]} />
-      </Animated.View>
+      </Animated.View> */}
     </View>
   );
 }
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#0077ffff",
   },
   logoContainer: {
     marginBottom: 30,

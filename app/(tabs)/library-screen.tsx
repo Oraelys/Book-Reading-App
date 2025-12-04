@@ -12,7 +12,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BookOpen, Search, Star, TrendingUp, Filter } from 'lucide-react-native';
+import { BookOpen, Search, Star, TrendingUp, Filter, Plus } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -27,8 +27,10 @@ interface Novel {
   rating: number;
   total_ratings: number;
   views: number;
-  reading_progress?: {
+  reading_progress: {
     progress_percentage: number;
+    current_page: number;
+    last_read: string;
   };
 }
 
@@ -41,63 +43,82 @@ export default function LibraryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [sortBy, setSortBy] = useState<'popular' | 'rating' | 'recent'>('popular');
+  const [sortBy, setSortBy] = useState<'recent' | 'progress' | 'title'>('recent');
 
   const categories = ['All', 'Romance', 'Mystery', 'Fantasy', 'Sci-Fi', 'Thriller'];
 
   useFocusEffect(
     React.useCallback(() => {
-      loadBooks();
+      loadUserBooks();
     }, [selectedCategory, sortBy])
   );
 
-  const loadBooks = async () => {
+  const loadUserBooks = async () => {
     if (!user) return;
 
     try {
+      // Get all books that user has reading progress for (i.e., in their library)
       let query = supabase
-        .from('novels')
-        .select('id, title, author, description, category, cover_image_url, rating, total_ratings, views')
-        .eq('is_public', true);
+        .from('reading_progress')
+        .select(`
+          progress_percentage,
+          current_page,
+          last_read,
+          novels:book_id (
+            id,
+            title,
+            author,
+            description,
+            category,
+            cover_image_url,
+            rating,
+            total_ratings,
+            views
+          )
+        `)
+        .eq('user_id', user.id);
 
-      // Filter by category
-      if (selectedCategory !== 'All') {
-        query = query.eq('category', selectedCategory);
+      // Sort based on selection
+      if (sortBy === 'recent') {
+        query = query.order('last_read', { ascending: false });
+      } else if (sortBy === 'progress') {
+        query = query.order('progress_percentage', { ascending: false });
       }
 
-      // Sort
-      if (sortBy === 'popular') {
-        query = query.order('views', { ascending: false });
-      } else if (sortBy === 'rating') {
-        query = query.order('rating', { ascending: false });
-      } else {
-        query = query.order('created_at', { ascending: false });
-      }
-
-      const { data: booksData, error } = await query;
+      const { data: progressData, error } = await query;
 
       if (error) throw error;
 
-      if (booksData) {
-        // Get reading progress for all books
-        const bookIds = booksData.map(book => book.id);
-        const { data: progressData } = await supabase
-          .from('reading_progress')
-          .select('book_id, progress_percentage')
-          .eq('user_id', user.id)
-          .in('book_id', bookIds);
+      if (progressData) {
+        // Transform data to include progress with book details
+        let booksWithProgress = progressData
+          .filter(item => item.novels) // Filter out any null novels
+          .map(item => ({
+            ...(item.novels as any),
+            reading_progress: {
+              progress_percentage: item.progress_percentage,
+              current_page: item.current_page,
+              last_read: item.last_read,
+            },
+          }));
 
-        // Merge progress with books
-        const booksWithProgress = booksData.map(book => ({
-          ...book,
-          reading_progress: progressData?.find(p => p.book_id === book.id),
-        }));
+        // Filter by category if not "All"
+        if (selectedCategory !== 'All') {
+          booksWithProgress = booksWithProgress.filter(
+            book => book.category === selectedCategory
+          );
+        }
+
+        // Sort by title if selected
+        if (sortBy === 'title') {
+          booksWithProgress.sort((a, b) => a.title.localeCompare(b.title));
+        }
 
         setBooks(booksWithProgress);
         setFilteredBooks(booksWithProgress);
       }
     } catch (error) {
-      console.error('Error loading books:', error);
+      console.error('Error loading user books:', error);
     } finally {
       setLoading(false);
     }
@@ -105,7 +126,7 @@ export default function LibraryScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadBooks();
+    await loadUserBooks();
     setRefreshing(false);
   };
 
@@ -133,53 +154,17 @@ export default function LibraryScreen() {
     }
 
     console.log('Navigating to book details:', bookId);
-    // Navigate to book details
     router.push({
       pathname: '/book-details',
       params: { bookId: bookId }
     } as any);
   };
 
-  const renderGridItem = ({ item }: { item: Novel }) => (
-    <TouchableOpacity
-      style={styles.gridItem}
-      onPress={() => handleBookPress(item.id)}
-    >
-      <View style={styles.gridImageContainer}>
-        <Image 
-          source={{ uri: item.cover_image_url }} 
-          style={styles.gridImage}
-          defaultSource={require('@/assets/images/book-placeholder.png')}
-        />
-        {item.reading_progress && item.reading_progress.progress_percentage > 0 && (
-          <View style={styles.progressBadge}>
-            <Text style={styles.progressBadgeText}>
-              {Math.round(item.reading_progress.progress_percentage)}%
-            </Text>
-          </View>
-        )}
-        <View style={styles.ratingBadge}>
-          <Star size={12} color="#FFD700" fill="#FFD700" />
-          <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
-        </View>
-      </View>
-      <Text style={styles.gridTitle} numberOfLines={2}>
-        {item.title}
-      </Text>
-      <Text style={styles.gridAuthor} numberOfLines={1}>
-        {item.author}
-      </Text>
-      <View style={styles.gridStats}>
-        <View style={styles.statItem}>
-          <TrendingUp size={12} color="#666" />
-          <Text style={styles.statText}>{item.views}</Text>
-        </View>
-        <View style={styles.categoryBadge}>
-          <Text style={styles.categoryBadgeText}>{item.category}</Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+  const handleBrowseAllBooks = () => {
+    // Navigate to a browse/discover screen where users can find and add new books
+    // For now, we'll just show an alert
+    alert('Browse feature coming soon! This will show all public books you can add to your library.');
+  };
 
   const renderListItem = ({ item }: { item: Novel }) => (
     <TouchableOpacity
@@ -212,15 +197,20 @@ export default function LibraryScreen() {
             <Text style={styles.listCategoryText}>{item.category}</Text>
           </View>
         </View>
-        {item.reading_progress && item.reading_progress.progress_percentage > 0 && (
-          <View style={styles.listProgressBar}>
-            <View
-              style={[
-                styles.listProgressFill,
-                { width: `${item.reading_progress.progress_percentage}%` },
-              ]}
-            />
-          </View>
+        {item.reading_progress && (
+          <>
+            <View style={styles.listProgressBar}>
+              <View
+                style={[
+                  styles.listProgressFill,
+                  { width: `${item.reading_progress.progress_percentage}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.progressLabel}>
+              {Math.round(item.reading_progress.progress_percentage)}% complete
+            </Text>
+          </>
         )}
       </View>
     </TouchableOpacity>
@@ -237,7 +227,8 @@ export default function LibraryScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Library</Text>
+        <Text style={styles.headerTitle}>My Library</Text>
+        <Text style={styles.headerSubtitle}>{books.length} books</Text>
       </View>
 
       {/* Search Bar */}
@@ -245,7 +236,7 @@ export default function LibraryScreen() {
         <Search size={20} color="#666" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search books, authors..."
+          placeholder="Search your library..."
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
@@ -281,41 +272,40 @@ export default function LibraryScreen() {
       {/* Sort Options */}
       <View style={styles.sortContainer}>
         <TouchableOpacity
-          style={[styles.sortButton, sortBy === 'popular' && styles.sortButtonActive]}
-          onPress={() => setSortBy('popular')}
-        >
-          <TrendingUp size={16} color={sortBy === 'popular' ? '#007AFF' : '#666'} />
-          <Text style={[styles.sortText, sortBy === 'popular' && styles.sortTextActive]}>
-            Popular
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.sortButton, sortBy === 'rating' && styles.sortButtonActive]}
-          onPress={() => setSortBy('rating')}
-        >
-          <Star size={16} color={sortBy === 'rating' ? '#007AFF' : '#666'} />
-          <Text style={[styles.sortText, sortBy === 'rating' && styles.sortTextActive]}>
-            Top Rated
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
           style={[styles.sortButton, sortBy === 'recent' && styles.sortButtonActive]}
           onPress={() => setSortBy('recent')}
         >
-          <Filter size={16} color={sortBy === 'recent' ? '#007AFF' : '#666'} />
+          <TrendingUp size={16} color={sortBy === 'recent' ? '#007AFF' : '#666'} />
           <Text style={[styles.sortText, sortBy === 'recent' && styles.sortTextActive]}>
             Recent
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.sortButton, sortBy === 'progress' && styles.sortButtonActive]}
+          onPress={() => setSortBy('progress')}
+        >
+          <Star size={16} color={sortBy === 'progress' ? '#007AFF' : '#666'} />
+          <Text style={[styles.sortText, sortBy === 'progress' && styles.sortTextActive]}>
+            Progress
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.sortButton, sortBy === 'title' && styles.sortButtonActive]}
+          onPress={() => setSortBy('title')}
+        >
+          <Filter size={16} color={sortBy === 'title' ? '#007AFF' : '#666'} />
+          <Text style={[styles.sortText, sortBy === 'title' && styles.sortTextActive]}>
+            Title
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Books Grid */}
+      {/* Books List */}
       <FlatList
         data={filteredBooks}
         renderItem={renderListItem}
         keyExtractor={(item) => item.id}
-        numColumns={1}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={styles.listContentContainer}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -328,12 +318,23 @@ export default function LibraryScreen() {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <BookOpen size={64} color="#ccc" />
-            <Text style={styles.emptyTitle}>No books found</Text>
+            <Text style={styles.emptyTitle}>
+              {searchQuery ? 'No books found' : 'Your library is empty'}
+            </Text>
             <Text style={styles.emptyText}>
               {searchQuery
                 ? 'Try a different search term'
-                : 'Check back later for new books'}
+                : 'Browse and add books to start reading'}
             </Text>
+            {!searchQuery && (
+              <TouchableOpacity 
+                style={styles.browseButton}
+                onPress={handleBrowseAllBooks}
+              >
+                <Plus size={20} color="#fff" />
+                <Text style={styles.browseButtonText}>Browse Books</Text>
+              </TouchableOpacity>
+            )}
           </View>
         }
       />
@@ -360,6 +361,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1a1a1a',
   },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -380,8 +386,9 @@ const styles = StyleSheet.create({
   },
   categoryScroll: {
     paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingBottom: 23,
     gap: 8,
+    height: 60,
   },
   categoryChip: {
     paddingHorizontal: 20,
@@ -389,6 +396,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
     borderRadius: 20,
     marginRight: 8,
+   
   },
   categoryChipActive: {
     backgroundColor: '#007AFF',
@@ -427,96 +435,9 @@ const styles = StyleSheet.create({
   sortTextActive: {
     color: '#007AFF',
   },
-  gridContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 100,
-  },
-  gridItem: {
-    flex: 1,
-    margin: 8,
-    maxWidth: '47%',
-  },
-  gridImageContainer: {
-    position: 'relative',
-    marginBottom: 8,
-  },
-  gridImage: {
-    width: '100%',
-    aspectRatio: 2 / 3,
-    borderRadius: 12,
-  },
-  progressBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  progressBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  ratingBadge: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  ratingText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  gridTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 4,
-  },
-  gridAuthor: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 8,
-  },
-  gridStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statText: {
-    fontSize: 11,
-    color: '#666',
-  },
-  categoryBadge: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  categoryBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#666',
-  },
-  listContent: {
+  listContentContainer: {
     paddingHorizontal: 20,
     paddingBottom: 100,
-    flex: 1,
-    justifyContent: 'space-between',
   },
   listItem: {
     flexDirection: 'row',
@@ -530,6 +451,9 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 8,
     marginRight: 12,
+  },
+  listContent: {
+    flex: 1,
   },
   listTitle: {
     fontSize: 16,
@@ -580,11 +504,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#e0e0e0',
     borderRadius: 2,
     overflow: 'hidden',
+    marginBottom: 4,
   },
   listProgressFill: {
     height: '100%',
     backgroundColor: '#007AFF',
     borderRadius: 2,
+  },
+  progressLabel: {
+    fontSize: 11,
+    color: '#666',
   },
   emptyContainer: {
     flex: 1,
@@ -603,5 +532,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     textAlign: 'center',
+    marginBottom: 24,
+  },
+  browseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  browseButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
