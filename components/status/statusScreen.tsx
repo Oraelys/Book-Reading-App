@@ -204,7 +204,7 @@ export const StatusScreen: React.FC<StatusScreenProps> = () => {
             placeholder="Type a status..."
             placeholderTextColor="rgba(255,255,255,0.6)"
             multiline
-            maxLength={200}
+            maxLength={1000}
             style={statusStyles.captionInput}
           />
 

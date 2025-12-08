@@ -67,6 +67,7 @@ function RootLayoutNav() {
       <Stack.Screen name="book-comments" />
       <Stack.Screen name="book-details" />
       <Stack.Screen name="+not-found" />
+      <Stack.Screen name="search-books" />
     </Stack>
   );
 }

@@ -10,6 +10,7 @@ import {
   Platform,
   Image,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,6 +31,7 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showOtpInput, setShowOtpInput] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   const pickProfileImage = async () => {
     try {
@@ -52,37 +54,93 @@ export default function RegisterScreen() {
     if (!profileImageFile) return null;
 
     try {
-      // Read the file as base64
-      const response = await fetch(profileImageFile.uri);
-      const blob = await response.blob();
+      console.log('Starting profile image upload for user:', userId);
       
-      // Create a unique filename
-      const fileExt = profileImageFile.name.split('.').pop();
+      // For React Native, we need to use fetch to get the file as arraybuffer
+      const response = await fetch(profileImageFile.uri);
+      const arrayBuffer = await response.arrayBuffer();
+      const fileData = new Uint8Array(arrayBuffer);
+      
+      const fileExt = profileImageFile.name?.split('.').pop() || 'jpg';
       const fileName = `${userId}_${Date.now()}.${fileExt}`;
-      const filePath = `profiles/${fileName}`;
+      const filePath = `${userId}/${fileName}`;
 
-      // Upload to Supabase Storage
+      console.log('Uploading to path:', filePath);
+
+      // Upload using Uint8Array instead of blob
       const { data, error: uploadError } = await supabase.storage
         .from('profile-pictures')
-        .upload(filePath, blob, {
+        .upload(filePath, fileData, {
           contentType: profileImageFile.mimeType || 'image/jpeg',
-          upsert: false,
+          upsert: true,
         });
 
       if (uploadError) {
         console.error('Upload error:', uploadError);
-        return null;
+        throw uploadError;
       }
+
+      console.log('Upload successful:', data);
 
       // Get public URL
       const { data: urlData } = supabase.storage
         .from('profile-pictures')
         .getPublicUrl(filePath);
 
+      console.log('Public URL:', urlData.publicUrl);
       return urlData.publicUrl;
     } catch (error) {
       console.error('Error uploading profile image:', error);
+      Alert.alert('Warning', 'Profile picture upload failed, but account will be created.');
       return null;
+    }
+  };
+
+  const createUserProfile = async (userId: string, userEmail: string) => {
+    try {
+      console.log('=== Creating Profile ===');
+      console.log('User ID:', userId);
+      console.log('Email:', userEmail);
+      console.log('Username:', username.trim());
+      console.log('Has profile image:', !!profileImageFile);
+      
+      let profilePictureUrl = null;
+      if (profileImageFile) {
+        console.log('Uploading profile picture...');
+        profilePictureUrl = await uploadProfileImage(userId);
+        console.log('Profile picture uploaded:', profilePictureUrl);
+      }
+
+      console.log('Inserting profile into database...');
+      const profileData = {
+        id: userId,
+        username: username.trim(),
+        email: userEmail,
+        avatar_url: profilePictureUrl,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      
+      console.log('Profile data:', profileData);
+
+      const { data, error: upsertError } = await supabase
+        .from('profiles')
+        .upsert(profileData, {
+          onConflict: 'id'
+        })
+        .select()
+        .single();
+
+      if (upsertError) {
+        console.error('❌ Profile upsert error:', upsertError);
+        throw upsertError;
+      }
+
+      console.log('✅ Profile created successfully:', data);
+      return { success: true, data };
+    } catch (error) {
+      console.error('❌ Error creating profile:', error);
+      throw error;
     }
   };
 
@@ -110,13 +168,90 @@ export default function RegisterScreen() {
     setLoading(true);
     setError('');
 
-    const { error: signUpError, data } = await signUp(email, password);
+    try {
+      // Check username availability
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('username', username.trim())
+        .maybeSingle();
 
-    if (signUpError) {
-      setError(signUpError.message);
-      setLoading(false);
-    } else {
-      setShowOtpInput(true);
+      if (existingProfile) {
+        setError('Username is already taken');
+        setLoading(false);
+        return;
+      }
+
+      const signUpResult = await signUp(email, password);
+
+      if (signUpResult.error) {
+        setError(signUpResult.error.message);
+        setLoading(false);
+        return;
+      }
+
+      // signUp returns { error, data } but data might be undefined
+      const signUpData = signUpResult.data;
+      
+      if (signUpData?.user) {
+        setUserId(signUpData.user.id);
+        
+        // Check if email confirmation is required
+        const { data: sessionData } = await supabase.auth.getSession();
+        
+        if (sessionData?.session) {
+          // User is already logged in (email confirmation disabled)
+          console.log('Email confirmation disabled, creating profile immediately');
+          
+          try {
+            await createUserProfile(signUpData.user.id, signUpData.user.email || email);
+            
+            Alert.alert(
+              'Success!',
+              'Your account has been created successfully!',
+              [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    setLoading(false);
+                    router.replace('/(tabs)');
+                  },
+                },
+              ]
+            );
+          } catch (profileError) {
+            console.error('Profile creation error:', profileError);
+            setLoading(false);
+            Alert.alert(
+              'Account Created',
+              'Your account was created but profile setup failed. Please update your profile in settings.',
+              [{ text: 'OK', onPress: () => router.replace('/(tabs)') }]
+            );
+          }
+        } else {
+          // Email confirmation is enabled, show OTP screen
+          setShowOtpInput(true);
+          setLoading(false);
+          Alert.alert(
+            'Check Your Email',
+            'We sent a verification code to your email. Please check your inbox (and spam folder).',
+            [{ text: 'OK' }]
+          );
+        }
+      } else {
+        // No user returned, but no error either - probably need to verify email
+        setShowOtpInput(true);
+        setLoading(false);
+        Alert.alert(
+          'Check Your Email',
+          'We sent a verification code to your email. Please verify to continue.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Signup error:', error);
+      setError('Failed to create account. Please try again.');
+    } finally {
       setLoading(false);
     }
   };
@@ -130,35 +265,100 @@ export default function RegisterScreen() {
     setLoading(true);
     setError('');
 
-    const { error: verifyError, data } = await verifyOtp(email, otp);
+    try {
+      const verifyResult = await verifyOtp(email, otp);
 
-    if (verifyError) {
-      setError(verifyError.message);
+      if (verifyResult.error) {
+        setError(verifyResult.error.message);
+        setLoading(false);
+        return;
+      }
+
+      const verifyData = verifyResult.data;
+
+      if (verifyData?.user) {
+        console.log('OTP verified, creating profile for user:', verifyData.user.id);
+        
+        try {
+          await createUserProfile(verifyData.user.id, verifyData.user.email || email);
+          console.log('Profile created successfully, redirecting...');
+          
+          Alert.alert(
+            'Success!',
+            'Your account is ready!',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  setLoading(false);
+                  setTimeout(() => {
+                    router.replace('/(tabs)');
+                  }, 300);
+                },
+              },
+            ]
+          );
+        } catch (profileError) {
+          console.error('Profile creation error:', profileError);
+          setLoading(false);
+          Alert.alert(
+            'Profile Setup',
+            'Account created but profile setup failed. Please update your profile in settings.',
+            [{ text: 'OK', onPress: () => router.replace('/(tabs)') }]
+          );
+        }
+      } else {
+        setError('Verification failed. Please try again.');
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Verification error:', error);
+      setError('Verification failed. Please try again.');
       setLoading(false);
-    } else if (data?.user) {
-      // Upload profile image if selected
-      let profilePictureUrl = null;
-      if (profileImageFile) {
-        profilePictureUrl = await uploadProfileImage(data.user.id);
-      }
+    }
+  };
 
-      // Update user profile with username and profile picture
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .insert({
-          id: data.user.id,
-          username: username,
-          email: email,
-          profile_picture_url: profilePictureUrl,
-          created_at: new Date().toISOString(),
-        });
+  const handleSkipVerification = () => {
+    Alert.alert(
+      'Skip Verification?',
+      'This is only available in development. In production, email verification is required for security.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Skip',
+          style: 'destructive',
+          onPress: async () => {
+            if (userId) {
+              try {
+                await createUserProfile(userId, email);
+                router.replace('/(tabs)');
+              } catch (error) {
+                console.error('Error creating profile:', error);
+                Alert.alert('Error', 'Failed to create profile');
+              }
+            }
+          },
+        },
+      ]
+    );
+  };
 
-      if (updateError) {
-        console.error('Error creating profile:', updateError);
-        // Continue anyway as the account is created
-      }
+  const handleResendOTP = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email,
+      });
 
-      router.replace('/(tabs)');
+      if (error) throw error;
+
+      Alert.alert('Success', 'Verification code resent! Check your email.');
+    } catch (error) {
+      console.error('Resend error:', error);
+      Alert.alert('Error', 'Failed to resend code. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -168,46 +368,71 @@ export default function RegisterScreen() {
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.content}>
-          <Text style={styles.title}>Verify Your Email</Text>
-          <Text style={styles.subtitle}>
-            Enter the 6-digit code sent to {email}
-          </Text>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.content}>
+            <Text style={styles.title}>Verify Your Email</Text>
+            <Text style={styles.subtitle}>
+              Enter the 6-digit code sent to {email}
+            </Text>
+            <Text style={styles.note}>
+              Check your spam folder if you don't see the email
+            </Text>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+            {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          <View style={styles.form}>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter 6-digit code"
-              value={otp}
-              onChangeText={setOtp}
-              keyboardType="number-pad"
-              maxLength={6}
-              editable={!loading}
-            />
+            <View style={styles.form}>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter 6-digit code"
+                value={otp}
+                onChangeText={setOtp}
+                keyboardType="number-pad"
+                maxLength={6}
+                editable={!loading}
+              />
 
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleVerifyOtp}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Verify & Create Profile</Text>
+              <TouchableOpacity
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={handleVerifyOtp}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>Verify & Create Profile</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={handleResendOTP}
+                disabled={loading}
+              >
+                <Text style={styles.secondaryButtonText}>Resend Code</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.linkButton}
+                onPress={() => setShowOtpInput(false)}
+                disabled={loading}
+              >
+                <Text style={styles.linkText}>Go back</Text>
+              </TouchableOpacity>
+
+              {/* Development only - Skip verification */}
+              {__DEV__ && (
+                <TouchableOpacity
+                  style={styles.devButton}
+                  onPress={handleSkipVerification}
+                >
+                  <Text style={styles.devButtonText}>
+                    [DEV] Skip Verification
+                  </Text>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.linkButton}
-              onPress={() => setShowOtpInput(false)}
-              disabled={loading}
-            >
-              <Text style={styles.linkText}>Go back</Text>
-            </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     );
   }
@@ -245,7 +470,7 @@ export default function RegisterScreen() {
                   <Camera size={16} color="#fff" />
                 </View>
               </TouchableOpacity>
-              <Text style={styles.profileHint}>Tap to add profile picture</Text>
+              <Text style={styles.profileHint}>Tap to add profile picture (optional)</Text>
             </View>
 
             <TextInput
@@ -336,7 +561,13 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: '#666',
-    marginBottom: 32,
+    marginBottom: 8,
+  },
+  note: {
+    fontSize: 13,
+    color: '#999',
+    fontStyle: 'italic',
+    marginBottom: 24,
   },
   profileSection: {
     alignItems: 'center',
@@ -406,6 +637,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  secondaryButton: {
+    height: 50,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    color: '#007AFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   linkButton: {
     padding: 12,
     alignItems: 'center',
@@ -418,6 +661,20 @@ const styles = StyleSheet.create({
     color: '#ff3b30',
     fontSize: 14,
     marginBottom: 16,
+    textAlign: 'center',
+  },
+  devButton: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#FFF3E0',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FF9800',
+  },
+  devButtonText: {
+    color: '#FF6F00',
+    fontSize: 12,
+    fontWeight: '600',
     textAlign: 'center',
   },
 });

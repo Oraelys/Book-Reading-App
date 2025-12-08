@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,10 +9,12 @@ import {
   Switch,
   Alert,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import * as DocumentPicker from 'expo-document-picker';
 import {
   Settings,
@@ -29,10 +31,18 @@ import {
   ChevronRight,
 } from 'lucide-react-native';
 
+interface UserProfile {
+  username: string;
+  email: string;
+  avatar_url: string | null;
+}
+
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState<'settings' | 'earnings'>('settings');
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   
   // Settings states
@@ -46,6 +56,58 @@ export default function ProfileScreen() {
   const [pendingEarnings, setPendingEarnings] = useState(320.00);
   const [hasBankAccount, setHasBankAccount] = useState(false);
 
+  useEffect(() => {
+    loadProfile();
+  }, [user]);
+
+  const loadProfile = async () => {
+    if (!user) return;
+
+    try {
+      const { data: profileData, error } = await supabase
+        .from('profiles')
+        .select('username, email, avatar_url')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error loading profile:', error);
+      }
+
+      if (profileData) {
+        setProfile(profileData);
+        if (profileData.avatar_url) {
+          setProfileImage(profileData.avatar_url);
+        }
+      } else {
+        // Profile doesn't exist, create a default one
+        console.log('Profile not found, creating default profile');
+        const username = user.email?.split('@')[0] || 'user';
+        
+        const { data: newProfile, error: createError } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            username: username,
+            email: user.email || '',
+            avatar_url: null,
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Error creating profile:', createError);
+        } else if (newProfile) {
+          setProfile(newProfile);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePickImage = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -54,10 +116,64 @@ export default function ProfileScreen() {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setProfileImage(result.assets[0].uri);
+        const newImage = result.assets[0];
+        setProfileImage(newImage.uri);
+        
+        // Upload to Supabase
+        await uploadProfileImage(newImage);
       }
     } catch (error) {
       console.error('Error picking image:', error);
+    }
+  };
+
+  const uploadProfileImage = async (imageFile: any) => {
+    if (!user) return;
+
+    try {
+      // Read the file as arraybuffer for React Native
+      const response = await fetch(imageFile.uri);
+      const arrayBuffer = await response.arrayBuffer();
+      const fileData = new Uint8Array(arrayBuffer);
+      
+      // Create filename
+      const fileExt = imageFile.name?.split('.').pop() || 'jpg';
+      const fileName = `${user.id}_${Date.now()}.${fileExt}`;
+      const filePath = `${user.id}/${fileName}`;
+
+      // Upload to Supabase Storage using Uint8Array
+      const { data, error: uploadError } = await supabase.storage
+        .from('profile-pictures')
+        .upload(filePath, fileData, {
+          contentType: imageFile.mimeType || 'image/jpeg',
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('profile-pictures')
+        .getPublicUrl(filePath);
+
+      // Update profile
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ 
+          avatar_url: urlData.publicUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+
+      if (updateError) throw updateError;
+
+      // Update local state
+      setProfile(prev => prev ? { ...prev, avatar_url: urlData.publicUrl } : null);
+
+      Alert.alert('Success', 'Profile picture updated!');
+    } catch (error) {
+      console.error('Error uploading profile image:', error);
+      Alert.alert('Error', 'Failed to upload profile picture');
     }
   };
 
@@ -308,6 +424,17 @@ export default function ProfileScreen() {
     </View>
   );
 
+  if (loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
+  const username = profile?.username || user?.email?.split('@')[0] || 'User';
+  const userEmail = profile?.email || user?.email || '';
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -319,7 +446,7 @@ export default function ProfileScreen() {
             ) : (
               <View style={styles.profilePlaceholder}>
                 <Text style={styles.profileInitial}>
-                  {user?.email?.charAt(0).toUpperCase() || 'U'}
+                  {username.charAt(0).toUpperCase()}
                 </Text>
               </View>
             )}
@@ -328,8 +455,8 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.userName}>{user?.email?.split('@')[0] || 'User'}</Text>
-          <Text style={styles.userEmail}>{user?.email}</Text>
+          <Text style={styles.userName}>{username}</Text>
+          <Text style={styles.userEmail}>{userEmail}</Text>
           {isWriter && (
             <View style={styles.writerBadge}>
               <Text style={styles.writerBadgeText}>✍️ Writer</Text>
@@ -382,6 +509,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     alignItems: 'center',
