@@ -1,3 +1,4 @@
+// app/register.tsx
 import React, { useState } from 'react';
 import {
   View,
@@ -18,6 +19,60 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Camera, User } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 
+// Helper function to generate user tag from username
+const generateUserTag = (username: string): string => {
+  // Remove spaces and special characters, convert to lowercase
+  const cleanUsername = username
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '')
+    .substring(0, 20); // Limit to 20 chars
+  
+  return `@${cleanUsername}`;
+};
+
+// Helper function to check if user tag is available
+const isUserTagAvailable = async (userTag: string): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('user_tag')
+      .eq('user_tag', userTag)
+      .maybeSingle();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error checking user tag:', error);
+      return false;
+    }
+
+    return !data; // Available if no data found
+  } catch (error) {
+    console.error('Error checking user tag:', error);
+    return false;
+  }
+};
+
+// Helper function to generate unique user tag
+const generateUniqueUserTag = async (baseUsername: string): Promise<string> => {
+  let userTag = generateUserTag(baseUsername);
+  let isAvailable = await isUserTagAvailable(userTag);
+  
+  // If tag is taken, append numbers until we find an available one
+  let suffix = 1;
+  while (!isAvailable && suffix < 1000) {
+    userTag = `${generateUserTag(baseUsername)}${suffix}`;
+    isAvailable = await isUserTagAvailable(userTag);
+    suffix++;
+  }
+  
+  if (!isAvailable) {
+    // Fallback to random number if still not available
+    const randomNum = Math.floor(Math.random() * 10000);
+    userTag = `${generateUserTag(baseUsername)}${randomNum}`;
+  }
+  
+  return userTag;
+};
+
 export default function RegisterScreen() {
   const router = useRouter();
   const { signUp, verifyOtp } = useAuth();
@@ -32,6 +87,18 @@ export default function RegisterScreen() {
   const [error, setError] = useState('');
   const [showOtpInput, setShowOtpInput] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [generatedTag, setGeneratedTag] = useState('');
+
+  // Preview user tag as user types username
+  const handleUsernameChange = (text: string) => {
+    setUsername(text);
+    if (text.trim()) {
+      const previewTag = generateUserTag(text);
+      setGeneratedTag(previewTag);
+    } else {
+      setGeneratedTag('');
+    }
+  };
 
   const pickProfileImage = async () => {
     try {
@@ -56,7 +123,6 @@ export default function RegisterScreen() {
     try {
       console.log('Starting profile image upload for user:', userId);
       
-      // For React Native, we need to use fetch to get the file as arraybuffer
       const response = await fetch(profileImageFile.uri);
       const arrayBuffer = await response.arrayBuffer();
       const fileData = new Uint8Array(arrayBuffer);
@@ -67,7 +133,6 @@ export default function RegisterScreen() {
 
       console.log('Uploading to path:', filePath);
 
-      // Upload using Uint8Array instead of blob
       const { data, error: uploadError } = await supabase.storage
         .from('profile-pictures')
         .upload(filePath, fileData, {
@@ -75,14 +140,10 @@ export default function RegisterScreen() {
           upsert: true,
         });
 
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
-        throw uploadError;
-      }
+      if (uploadError) throw uploadError;
 
       console.log('Upload successful:', data);
 
-      // Get public URL
       const { data: urlData } = supabase.storage
         .from('profile-pictures')
         .getPublicUrl(filePath);
@@ -104,6 +165,10 @@ export default function RegisterScreen() {
       console.log('Username:', username.trim());
       console.log('Has profile image:', !!profileImageFile);
       
+      // Generate unique user tag
+      const userTag = await generateUniqueUserTag(username.trim());
+      console.log('Generated user tag:', userTag);
+      
       let profilePictureUrl = null;
       if (profileImageFile) {
         console.log('Uploading profile picture...');
@@ -115,8 +180,11 @@ export default function RegisterScreen() {
       const profileData = {
         id: userId,
         username: username.trim(),
+        user_tag: userTag,
         email: userEmail,
         avatar_url: profilePictureUrl,
+        bio: null,
+        is_public: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -137,7 +205,7 @@ export default function RegisterScreen() {
       }
 
       console.log('✅ Profile created successfully:', data);
-      return { success: true, data };
+      return { success: true, data, userTag };
     } catch (error) {
       console.error('❌ Error creating profile:', error);
       throw error;
@@ -165,11 +233,18 @@ export default function RegisterScreen() {
       return;
     }
 
+    // Validate username format
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    if (!usernameRegex.test(username.trim())) {
+      setError('Username can only contain letters, numbers, and underscores');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     try {
-      // Check username availability
+      // Check if username is already taken
       const { data: existingProfile } = await supabase
         .from('profiles')
         .select('username')
@@ -190,7 +265,6 @@ export default function RegisterScreen() {
         return;
       }
 
-      // signUp returns { error, data } but data might be undefined
       const signUpData = signUpResult.data;
       
       if (signUpData?.user) {
@@ -204,11 +278,14 @@ export default function RegisterScreen() {
           console.log('Email confirmation disabled, creating profile immediately');
           
           try {
-            await createUserProfile(signUpData.user.id, signUpData.user.email || email);
+            const { userTag } = await createUserProfile(
+              signUpData.user.id, 
+              signUpData.user.email || email
+            );
             
             Alert.alert(
               'Success!',
-              'Your account has been created successfully!',
+              `Your account has been created!\nYour user tag is ${userTag}`,
               [
                 {
                   text: 'OK',
@@ -239,7 +316,6 @@ export default function RegisterScreen() {
           );
         }
       } else {
-        // No user returned, but no error either - probably need to verify email
         setShowOtpInput(true);
         setLoading(false);
         Alert.alert(
@@ -280,12 +356,15 @@ export default function RegisterScreen() {
         console.log('OTP verified, creating profile for user:', verifyData.user.id);
         
         try {
-          await createUserProfile(verifyData.user.id, verifyData.user.email || email);
+          const { userTag } = await createUserProfile(
+            verifyData.user.id, 
+            verifyData.user.email || email
+          );
           console.log('Profile created successfully, redirecting...');
           
           Alert.alert(
             'Success!',
-            'Your account is ready!',
+            `Your account is ready!\nYour user tag is ${userTag}`,
             [
               {
                 text: 'OK',
@@ -477,10 +556,18 @@ export default function RegisterScreen() {
               style={styles.input}
               placeholder="Username"
               value={username}
-              onChangeText={setUsername}
+              onChangeText={handleUsernameChange}
               autoCapitalize="none"
               editable={!loading}
             />
+            
+            {/* Show generated user tag preview */}
+            {generatedTag && (
+              <View style={styles.tagPreview}>
+                <Text style={styles.tagPreviewLabel}>Your tag will be:</Text>
+                <Text style={styles.tagPreviewText}>{generatedTag}</Text>
+              </View>
+            )}
 
             <TextInput
               style={styles.input}
@@ -620,6 +707,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 16,
     fontSize: 16,
+  },
+  tagPreview: {
+    backgroundColor: '#E3F2FD',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: -8,
+  },
+  tagPreviewLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  tagPreviewText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
   },
   button: {
     height: 50,

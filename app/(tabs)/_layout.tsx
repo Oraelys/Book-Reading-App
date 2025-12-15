@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { BookOpen, Home, Plus, MessageCircle, PenTool, Settings, User } from 'lucide-react-native';
+import { BookOpen, Home, MessageCircle, PenTool, User } from 'lucide-react-native';
 
 
 export default function TabLayout() {

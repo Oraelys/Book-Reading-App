@@ -1,8 +1,10 @@
+// app/_layout.tsx
 import { useEffect, useState } from 'react';
 import { Stack, useRouter, useSegments, SplashScreen } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { ThemeProvider, useTheme } from '@/contexts/ThemeContexts';
 
 // Prevent the splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -11,6 +13,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 
 function RootLayoutNav() {
   const { user, loading } = useAuth();
+  const { isDark } = useTheme();
   const segments = useSegments();
   const router = useRouter();
   const [appIsReady, setAppIsReady] = useState(false);
@@ -38,9 +41,8 @@ function RootLayoutNav() {
 
     const inAuthGroup = segments[0] === '(tabs)';
     const inAuth = segments[0] === 'login' || segments[0] === 'register';
-    const inBookDetails = segments[0] === 'book-details';
-    const inReader = segments[0] === 'reader';
-    const inBookComments = segments[0] === 'book-comments';
+    const publicScreens = ['book-details', 'reader', 'book-comments', 'chat-room', 'search-users', 'user-profile', 'create-group', 'create-status', 'status-viewer'];
+    const inPublicScreen = publicScreens.includes(segments[0] as string);
 
     console.log('Navigation check:', { user: !!user, segments, appIsReady });
 
@@ -48,7 +50,7 @@ function RootLayoutNav() {
     if (!user && !inAuth) {
       console.log('Navigating to login');
       router.replace('/login');
-    } else if (user && !inAuthGroup && !inAuth && !inBookDetails && !inReader && !inBookComments) {
+    } else if (user && !inAuthGroup && !inAuth && !inPublicScreen) {
       console.log('Navigating to tabs');
       router.replace('/(tabs)');
     }
@@ -58,17 +60,26 @@ function RootLayoutNav() {
   }, [appIsReady, user, segments]);
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="login" />
-      <Stack.Screen name="register" />
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="reader" />
-      <Stack.Screen name="book-comments" />
-      <Stack.Screen name="book-details" />
-      <Stack.Screen name="+not-found" />
-      <Stack.Screen name="search-books" />
-    </Stack>
+    <>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="login" />
+        <Stack.Screen name="register" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="reader" />
+        <Stack.Screen name="book-comments" />
+        <Stack.Screen name="book-details" />
+        <Stack.Screen name="search-books" />
+        <Stack.Screen name="chat-room" />
+        <Stack.Screen name="search-users" />
+        <Stack.Screen name="+not-found" />
+        <Stack.Screen name="user-profile" />
+        <Stack.Screen name="create-group" />
+        <Stack.Screen name="create-status" />
+        <Stack.Screen name="status-viewer" />
+      </Stack>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+    </>
   );
 }
 
@@ -76,9 +87,10 @@ export default function RootLayout() {
   useFrameworkReady();
 
   return (
-    <AuthProvider>
-      <RootLayoutNav />
-      <StatusBar style="auto" />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <RootLayoutNav />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

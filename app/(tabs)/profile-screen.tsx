@@ -1,514 +1,366 @@
+// app/user-profile.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   TouchableOpacity,
-  Image,
   ScrollView,
-  Switch,
-  Alert,
-  Platform,
   ActivityIndicator,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { ArrowLeft, MessageCircle, BookOpen, Star } from 'lucide-react-native';
+import { ChatService, Profile } from '@/services/chatservices';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContexts';
 import { supabase } from '@/lib/supabase';
-import * as DocumentPicker from 'expo-document-picker';
-import {
-  Settings,
-  LogOut,
-  Bell,
-  Moon,
-  Globe,
-  Lock,
-  HelpCircle,
-  DollarSign,
-  CreditCard,
-  TrendingUp,
-  Camera,
-  ChevronRight,
-} from 'lucide-react-native';
 
-interface UserProfile {
-  username: string;
-  email: string;
-  avatar_url: string | null;
+interface UserBook {
+  id: string;
+  title: string;
+  author: string;
+  cover_image_url: string;
+  rating: number;
+  progress_percentage: number;
 }
 
-export default function ProfileScreen() {
+interface UserStats {
+  total_books: number;
+  completed_books: number;
+  reading_books: number;
+  average_progress: number;
+}
+
+export default function UserProfileScreen() {
   const router = useRouter();
-  const { user, signOut } = useAuth();
-  const [activeTab, setActiveTab] = useState<'settings' | 'earnings'>('settings');
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const { userId } = useLocalSearchParams<{ userId: string }>();
+  const { user: currentUser } = useAuth();
+  const { theme } = useTheme();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [books, setBooks] = useState<UserBook[]>([]);
+  const [stats, setStats] = useState<UserStats>({
+    total_books: 0,
+    completed_books: 0,
+    reading_books: 0,
+    average_progress: 0,
+  });
   const [loading, setLoading] = useState(true);
-  const [profileImage, setProfileImage] = useState<string | null>(null);
-  
-  // Settings states
-  const [notifications, setNotifications] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
-  const [autoBackup, setAutoBackup] = useState(true);
-  
-  // Writer/earnings states (mock data)
-  const [isWriter, setIsWriter] = useState(true);
-  const [totalEarnings, setTotalEarnings] = useState(1250.50);
-  const [pendingEarnings, setPendingEarnings] = useState(320.00);
-  const [hasBankAccount, setHasBankAccount] = useState(false);
+  const [startingChat, setStartingChat] = useState(false);
+  const [activeTab, setActiveTab] = useState<'reading' | 'completed'>('reading');
+
+  const styles = getStyles(theme);
 
   useEffect(() => {
-    loadProfile();
-  }, [user]);
+    if (userId) {
+      loadProfileData();
+    }
+  }, [userId]);
 
-  const loadProfile = async () => {
-    if (!user) return;
+  const loadProfileData = async () => {
+    if (!userId) return;
 
     try {
-      const { data: profileData, error } = await supabase
-        .from('profiles')
-        .select('username, email, avatar_url')
-        .eq('id', user.id)
-        .maybeSingle();
+      // Load profile
+      const profileData = await ChatService.getUserById(userId);
+      setProfile(profileData);
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error loading profile:', error);
-      }
+      // Load user's reading progress and books
+      const { data: progressData, error } = await supabase
+        .from('reading_progress')
+        .select(`
+          progress_percentage,
+          current_page,
+          last_read,
+          novels:book_id (
+            id,
+            title,
+            author,
+            cover_image_url,
+            rating
+          )
+        `)
+        .eq('user_id', userId)
+        .order('last_read', { ascending: false });
 
-      if (profileData) {
-        setProfile(profileData);
-        if (profileData.avatar_url) {
-          setProfileImage(profileData.avatar_url);
-        }
-      } else {
-        // Profile doesn't exist, create a default one
-        console.log('Profile not found, creating default profile');
-        const username = user.email?.split('@')[0] || 'user';
-        
-        const { data: newProfile, error: createError } = await supabase
-          .from('profiles')
-          .insert({
-            id: user.id,
-            username: username,
-            email: user.email || '',
-            avatar_url: null,
-          })
-          .select()
-          .single();
+      if (error) throw error;
 
-        if (createError) {
-          console.error('Error creating profile:', createError);
-        } else if (newProfile) {
-          setProfile(newProfile);
-        }
+      if (progressData) {
+        const userBooks: UserBook[] = progressData
+          .filter(item => item.novels)
+          .map(item => ({
+            ...(item.novels as any),
+            progress_percentage: item.progress_percentage,
+          }));
+
+        setBooks(userBooks);
+
+        // Calculate stats
+        const completed = userBooks.filter(b => b.progress_percentage >= 100).length;
+        const reading = userBooks.filter(b => b.progress_percentage > 0 && b.progress_percentage < 100).length;
+        const avgProgress = userBooks.length > 0
+          ? userBooks.reduce((sum, b) => sum + b.progress_percentage, 0) / userBooks.length
+          : 0;
+
+        setStats({
+          total_books: userBooks.length,
+          completed_books: completed,
+          reading_books: reading,
+          average_progress: avgProgress,
+        });
       }
     } catch (error) {
-      console.error('Error loading profile:', error);
+      console.error('Error loading profile data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePickImage = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['image/*'],
-        copyToCacheDirectory: true,
-      });
+  const handleStartChat = async () => {
+    if (!userId || !profile) return;
 
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const newImage = result.assets[0];
-        setProfileImage(newImage.uri);
-        
-        // Upload to Supabase
-        await uploadProfileImage(newImage);
+    setStartingChat(true);
+    try {
+      const roomId = await ChatService.getOrCreateDMRoom(userId);
+      if (roomId) {
+        router.push(`/chat-room?roomId=${roomId}`);
       }
     } catch (error) {
-      console.error('Error picking image:', error);
+      console.error('Error starting chat:', error);
+    } finally {
+      setStartingChat(false);
     }
   };
 
-  const uploadProfileImage = async (imageFile: any) => {
-    if (!user) return;
-
-    try {
-      // Read the file as arraybuffer for React Native
-      const response = await fetch(imageFile.uri);
-      const arrayBuffer = await response.arrayBuffer();
-      const fileData = new Uint8Array(arrayBuffer);
-      
-      // Create filename
-      const fileExt = imageFile.name?.split('.').pop() || 'jpg';
-      const fileName = `${user.id}_${Date.now()}.${fileExt}`;
-      const filePath = `${user.id}/${fileName}`;
-
-      // Upload to Supabase Storage using Uint8Array
-      const { data, error: uploadError } = await supabase.storage
-        .from('profile-pictures')
-        .upload(filePath, fileData, {
-          contentType: imageFile.mimeType || 'image/jpeg',
-          upsert: true,
-        });
-
-      if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('profile-pictures')
-        .getPublicUrl(filePath);
-
-      // Update profile
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ 
-          avatar_url: urlData.publicUrl,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      if (updateError) throw updateError;
-
-      // Update local state
-      setProfile(prev => prev ? { ...prev, avatar_url: urlData.publicUrl } : null);
-
-      Alert.alert('Success', 'Profile picture updated!');
-    } catch (error) {
-      console.error('Error uploading profile image:', error);
-      Alert.alert('Error', 'Failed to upload profile picture');
-    }
+  const handleBookPress = (bookId: string) => {
+    router.push(`/book-details?bookId=${bookId}`);
   };
 
-  const handleSignOut = async () => {
-    if (Platform.OS === 'web') {
-      if (confirm('Are you sure you want to sign out?')) {
-        await signOut();
-        router.replace('/login');
-      }
-    } else {
-      Alert.alert(
-        'Sign Out',
-        'Are you sure you want to sign out?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Sign Out',
-            style: 'destructive',
-            onPress: async () => {
-              await signOut();
-              router.replace('/login');
-            },
-          },
-        ]
-      );
-    }
-  };
-
-  const handleAddBankAccount = () => {
-    Alert.alert(
-      'Add Bank Account',
-      'This feature will allow you to link your bank account for withdrawals.',
-      [{ text: 'OK' }]
-    );
-  };
-
-  const handleWithdraw = () => {
-    if (!hasBankAccount) {
-      Alert.alert(
-        'No Bank Account',
-        'Please add a bank account first to withdraw funds.',
-        [{ text: 'OK' }]
-      );
-    } else {
-      Alert.alert(
-        'Withdraw Funds',
-        `Withdraw $${totalEarnings.toFixed(2)} to your bank account?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Withdraw', onPress: () => console.log('Withdrawing...') },
-        ]
-      );
-    }
-  };
-
-  const renderSettingsTab = () => (
-    <View style={styles.tabContent}>
-      {/* Notification Settings */}
-      <View style={styles.settingItem}>
-        <View style={styles.settingLeft}>
-          <Bell size={20} color="#007AFF" />
-          <Text style={styles.settingText}>Notifications</Text>
-        </View>
-        <Switch
-          value={notifications}
-          onValueChange={setNotifications}
-          trackColor={{ false: '#ddd', true: '#007AFF' }}
-        />
-      </View>
-
-      {/* Dark Mode */}
-      <View style={styles.settingItem}>
-        <View style={styles.settingLeft}>
-          <Moon size={20} color="#007AFF" />
-          <Text style={styles.settingText}>Dark Mode</Text>
-        </View>
-        <Switch
-          value={darkMode}
-          onValueChange={setDarkMode}
-          trackColor={{ false: '#ddd', true: '#007AFF' }}
-        />
-      </View>
-
-      {/* Auto Backup */}
-      <View style={styles.settingItem}>
-        <View style={styles.settingLeft}>
-          <Settings size={20} color="#007AFF" />
-          <Text style={styles.settingText}>Auto Backup</Text>
-        </View>
-        <Switch
-          value={autoBackup}
-          onValueChange={setAutoBackup}
-          trackColor={{ false: '#ddd', true: '#007AFF' }}
-        />
-      </View>
-
-      <View style={styles.divider} />
-
-      {/* Navigation Options */}
-      <TouchableOpacity style={styles.settingItem}>
-        <View style={styles.settingLeft}>
-          <Lock size={20} color="#007AFF" />
-          <Text style={styles.settingText}>Privacy & Security</Text>
-        </View>
-        <ChevronRight size={20} color="#999" />
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.settingItem}>
-        <View style={styles.settingLeft}>
-          <Globe size={20} color="#007AFF" />
-          <Text style={styles.settingText}>Language</Text>
-        </View>
-        <ChevronRight size={20} color="#999" />
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.settingItem}>
-        <View style={styles.settingLeft}>
-          <HelpCircle size={20} color="#007AFF" />
-          <Text style={styles.settingText}>Help & Support</Text>
-        </View>
-        <ChevronRight size={20} color="#999" />
-      </TouchableOpacity>
-
-      <View style={styles.divider} />
-
-      {/* Logout Button */}
-      <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
-        <LogOut size={20} color="#ff3b30" />
-        <Text style={styles.logoutText}>Sign Out</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  const renderEarningsTab = () => (
-    <View style={styles.tabContent}>
-      {!isWriter ? (
-        <View style={styles.notWriterContainer}>
-          <DollarSign size={48} color="#ccc" />
-          <Text style={styles.notWriterTitle}>Become a Writer</Text>
-          <Text style={styles.notWriterText}>
-            Start writing and publishing your own novels to earn money
-          </Text>
-          <TouchableOpacity style={styles.becomeWriterButton}>
-            <Text style={styles.becomeWriterButtonText}>Apply as Writer</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <>
-          {/* Earnings Cards */}
-          <View style={styles.earningsCards}>
-            <View style={styles.earningCard}>
-              <View style={styles.earningCardHeader}>
-                <DollarSign size={20} color="#4CAF50" />
-                <Text style={styles.earningCardLabel}>Total Earnings</Text>
-              </View>
-              <Text style={styles.earningAmount}>${totalEarnings.toFixed(2)}</Text>
-            </View>
-
-            <View style={styles.earningCard}>
-              <View style={styles.earningCardHeader}>
-                <TrendingUp size={20} color="#FF9800" />
-                <Text style={styles.earningCardLabel}>Pending</Text>
-              </View>
-              <Text style={styles.earningAmount}>${pendingEarnings.toFixed(2)}</Text>
-            </View>
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* Bank Account Section */}
-          <View style={styles.bankSection}>
-            <Text style={styles.sectionTitle}>Payment Method</Text>
-            
-            {!hasBankAccount ? (
-              <TouchableOpacity
-                style={styles.addBankButton}
-                onPress={handleAddBankAccount}
-              >
-                <CreditCard size={24} color="#007AFF" />
-                <View style={styles.addBankContent}>
-                  <Text style={styles.addBankTitle}>Add Bank Account</Text>
-                  <Text style={styles.addBankSubtitle}>
-                    Link your bank to withdraw earnings
-                  </Text>
-                </View>
-                <ChevronRight size={20} color="#007AFF" />
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.bankCard}>
-                <CreditCard size={24} color="#007AFF" />
-                <View style={styles.bankInfo}>
-                  <Text style={styles.bankName}>Chase Bank</Text>
-                  <Text style={styles.bankAccount}>•••• 4242</Text>
-                </View>
-                <TouchableOpacity>
-                  <Text style={styles.changeButton}>Change</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          {/* Withdraw Button */}
-          <TouchableOpacity
-            style={[
-              styles.withdrawButton,
-              !hasBankAccount && styles.withdrawButtonDisabled,
-            ]}
-            onPress={handleWithdraw}
-            disabled={!hasBankAccount}
-          >
-            <Text style={styles.withdrawButtonText}>
-              Withdraw ${totalEarnings.toFixed(2)}
+  const renderBookItem = ({ item }: { item: UserBook }) => (
+    <TouchableOpacity
+      style={styles.bookCard}
+      onPress={() => handleBookPress(item.id)}
+    >
+      <Image
+        source={{ uri: item.cover_image_url }}
+        style={styles.bookCover}
+        defaultSource={require('@/assets/images/book-placeholder.png')}
+      />
+      <View style={styles.bookInfo}>
+        <Text style={[styles.bookTitle, { color: theme.text }]} numberOfLines={2}>
+          {item.title}
+        </Text>
+        <Text style={[styles.bookAuthor, { color: theme.textSecondary }]} numberOfLines={1}>
+          {item.author}
+        </Text>
+        <View style={styles.bookFooter}>
+          <View style={styles.ratingContainer}>
+            <Star size={14} color="#FFD700" fill="#FFD700" />
+            <Text style={[styles.ratingText, { color: theme.text }]}>
+              {item.rating.toFixed(1)}
             </Text>
-          </TouchableOpacity>
-
-          {/* Earnings History */}
-          <View style={styles.historySection}>
-            <Text style={styles.sectionTitle}>Recent Transactions</Text>
-            
-            <View style={styles.transactionItem}>
-              <View>
-                <Text style={styles.transactionTitle}>Reader Purchase</Text>
-                <Text style={styles.transactionDate}>Nov 25, 2024</Text>
-              </View>
-              <Text style={styles.transactionAmount}>+$15.99</Text>
-            </View>
-
-            <View style={styles.transactionItem}>
-              <View>
-                <Text style={styles.transactionTitle}>Reader Purchase</Text>
-                <Text style={styles.transactionDate}>Nov 22, 2024</Text>
-              </View>
-              <Text style={styles.transactionAmount}>+$12.50</Text>
-            </View>
-
-            <View style={styles.transactionItem}>
-              <View>
-                <Text style={styles.transactionTitle}>Withdrawal</Text>
-                <Text style={styles.transactionDate}>Nov 20, 2024</Text>
-              </View>
-              <Text style={[styles.transactionAmount, styles.transactionNegative]}>
-                -$500.00
-              </Text>
-            </View>
           </View>
-        </>
-      )}
-    </View>
+          <View style={styles.progressContainer}>
+            <Text style={[styles.progressText, { color: theme.primary }]}>
+              {Math.round(item.progress_percentage)}%
+            </Text>
+          </View>
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={[styles.centerContainer, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
   }
 
-  const username = profile?.username || user?.email?.split('@')[0] || 'User';
-  const userEmail = profile?.email || user?.email || '';
+  if (!profile) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color={theme.text} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.centerContainer}>
+          <Text style={[styles.errorText, { color: theme.text }]}>User not found</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const isOwnProfile = currentUser?.id === userId;
+  const readingBooks = books.filter(b => b.progress_percentage > 0 && b.progress_percentage < 100);
+  const completedBooks = books.filter(b => b.progress_percentage >= 100);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: theme.border }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <ArrowLeft size={24} color={theme.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>Profile</Text>
+        <View style={styles.placeholder} />
+      </View>
+
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile Header */}
-        <View style={styles.header}>
-          <View style={styles.profileImageContainer}>
-            {profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.profileImage} />
-            ) : (
-              <View style={styles.profilePlaceholder}>
-                <Text style={styles.profileInitial}>
-                  {username.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
-            <TouchableOpacity style={styles.cameraButton} onPress={handlePickImage}>
-              <Camera size={16} color="#fff" />
-            </TouchableOpacity>
-          </View>
-
-          <Text style={styles.userName}>{username}</Text>
-          <Text style={styles.userEmail}>{userEmail}</Text>
-          {isWriter && (
-            <View style={styles.writerBadge}>
-              <Text style={styles.writerBadgeText}>✍️ Writer</Text>
-            </View>
+        <View style={styles.profileHeader}>
+          <Image
+            source={{ uri: profile.avatar_url || 'https://via.placeholder.com/120' }}
+            style={styles.avatar}
+          />
+          <Text style={[styles.username, { color: theme.text }]}>
+            {profile.username}
+          </Text>
+          <Text style={[styles.userTag, { color: theme.textSecondary }]}>
+            {profile.user_tag}
+          </Text>
+          {profile.bio && (
+            <Text style={[styles.bio, { color: theme.textSecondary }]}>
+              {profile.bio}
+            </Text>
           )}
         </View>
 
-        {/* Tabs Section */}
-        <View style={styles.tabsContainer}>
-          {/* Tab Controls */}
-          <View style={styles.tabControls}>
+        {/* Stats Cards */}
+        <View style={styles.statsContainer}>
+          <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
+            <BookOpen size={24} color={theme.primary} />
+            <Text style={[styles.statValue, { color: theme.text }]}>
+              {stats.total_books}
+            </Text>
+            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
+              Total Books
+            </Text>
+          </View>
+
+          <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
+            <Star size={24} color="#FFD700" />
+            <Text style={[styles.statValue, { color: theme.text }]}>
+              {stats.completed_books}
+            </Text>
+            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
+              Completed
+            </Text>
+          </View>
+
+          <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
+            <Text style={[styles.statValue, { color: theme.primary }]}>
+              {Math.round(stats.average_progress)}%
+            </Text>
+            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
+              Avg Progress
+            </Text>
+          </View>
+        </View>
+
+        {/* Action Button */}
+        {!isOwnProfile && (
+          <View style={styles.actionContainer}>
             <TouchableOpacity
-              style={[styles.tab, activeTab === 'settings' && styles.tabActive]}
-              onPress={() => setActiveTab('settings')}
+              style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+              onPress={handleStartChat}
+              disabled={startingChat}
             >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === 'settings' && styles.tabTextActive,
-                ]}
-              >
-                Settings
+              {startingChat ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <MessageCircle size={20} color="#fff" />
+                  <Text style={styles.primaryButtonText}>Send Message</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Books Section */}
+        <View style={styles.booksSection}>
+          <View style={styles.tabsContainer}>
+            <TouchableOpacity
+              style={[
+                styles.tab,
+                activeTab === 'reading' && [styles.tabActive, { borderBottomColor: theme.primary }]
+              ]}
+              onPress={() => setActiveTab('reading')}
+            >
+              <Text style={[
+                styles.tabText,
+                { color: activeTab === 'reading' ? theme.primary : theme.textSecondary }
+              ]}>
+                Reading ({readingBooks.length})
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.tab, activeTab === 'earnings' && styles.tabActive]}
-              onPress={() => setActiveTab('earnings')}
+              style={[
+                styles.tab,
+                activeTab === 'completed' && [styles.tabActive, { borderBottomColor: theme.primary }]
+              ]}
+              onPress={() => setActiveTab('completed')}
             >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === 'earnings' && styles.tabTextActive,
-                ]}
-              >
-                Earnings
+              <Text style={[
+                styles.tabText,
+                { color: activeTab === 'completed' ? theme.primary : theme.textSecondary }
+              ]}>
+                Completed ({completedBooks.length})
               </Text>
             </TouchableOpacity>
           </View>
 
-          {/* Tab Content */}
-          {activeTab === 'settings' ? renderSettingsTab() : renderEarningsTab()}
+          {/* Books List */}
+          {activeTab === 'reading' ? (
+            readingBooks.length > 0 ? (
+              <FlatList
+                data={readingBooks}
+                renderItem={renderBookItem}
+                keyExtractor={(item) => item.id}
+                scrollEnabled={false}
+                contentContainerStyle={styles.booksList}
+              />
+            ) : (
+              <View style={styles.emptyBooks}>
+                <BookOpen size={48} color={theme.border} />
+                <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                  No books currently reading
+                </Text>
+              </View>
+            )
+          ) : (
+            completedBooks.length > 0 ? (
+              <FlatList
+                data={completedBooks}
+                renderItem={renderBookItem}
+                keyExtractor={(item) => item.id}
+                scrollEnabled={false}
+                contentContainerStyle={styles.booksList}
+              />
+            ) : (
+              <View style={styles.emptyBooks}>
+                <Star size={48} color={theme.border} />
+                <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                  No completed books yet
+                </Text>
+              </View>
+            )
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   centerContainer: {
     flex: 1,
@@ -516,285 +368,174 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  placeholder: {
+    width: 40,
+  },
+  profileHeader: {
     alignItems: 'center',
     paddingVertical: 32,
     paddingHorizontal: 24,
-    backgroundColor: '#fff',
   },
-  profileImageContainer: {
-    position: 'relative',
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     marginBottom: 16,
-  },
-  profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-  },
-  profilePlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profileInitial: {
-    fontSize: 40,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  cameraButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
     borderWidth: 3,
-    borderColor: '#fff',
+    borderColor: theme.border,
   },
-  userName: {
-    fontSize: 24,
+  username: {
+    fontSize: 22,
     fontWeight: '700',
-    color: '#1a1a1a',
     marginBottom: 4,
   },
-  userEmail: {
-    fontSize: 14,
-    color: '#666',
+  userTag: {
+    fontSize: 15,
+    marginBottom: 12,
   },
-  writerBadge: {
-    marginTop: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    backgroundColor: '#FFF3E0',
-    borderRadius: 16,
-  },
-  writerBadgeText: {
+  bio: {
     fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    gap: 12,
+    marginBottom: 20,
+  },
+  statCard: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  actionContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 24,
+  },
+  primaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
-    color: '#FF6F00',
+  },
+  booksSection: {
+    flex: 1,
   },
   tabsContainer: {
-    marginTop: 16,
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
-    minHeight: 400,
-  },
-  tabControls: {
     flexDirection: 'row',
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: theme.border,
   },
   tab: {
     flex: 1,
-    paddingVertical: 16,
+    paddingVertical: 12,
     alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
   tabActive: {
     borderBottomWidth: 2,
-    borderBottomColor: '#007AFF',
   },
   tabText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#666',
   },
-  tabTextActive: {
-    color: '#007AFF',
-  },
-  tabContent: {
-    padding: 24,
-  },
-  settingItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-  },
-  settingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  booksList: {
+    padding: 20,
     gap: 12,
   },
-  settingText: {
-    fontSize: 16,
-    color: '#1a1a1a',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#eee',
-    marginVertical: 8,
-  },
-  logoutButton: {
+  bookCard: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 16,
+    backgroundColor: theme.surface,
+    borderRadius: 12,
+    padding: 12,
   },
-  logoutText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#ff3b30',
-  },
-  notWriterContainer: {
-    alignItems: 'center',
-    paddingVertical: 48,
-  },
-  notWriterTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    marginTop: 16,
-  },
-  notWriterText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 24,
-  },
-  becomeWriterButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 32,
-    paddingVertical: 12,
+  bookCover: {
+    width: 60,
+    height: 90,
     borderRadius: 8,
+    marginRight: 12,
   },
-  becomeWriterButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  earningsCards: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
-  },
-  earningCard: {
+  bookInfo: {
     flex: 1,
-    backgroundColor: '#f9f9f9',
-    padding: 16,
-    borderRadius: 12,
-  },
-  earningCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  earningCardLabel: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
-  },
-  earningAmount: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1a1a1a',
-  },
-  bankSection: {
-    marginVertical: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 16,
-  },
-  addBankButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 12,
-    gap: 12,
-  },
-  addBankContent: {
-    flex: 1,
-  },
-  addBankTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 2,
-  },
-  addBankSubtitle: {
-    fontSize: 12,
-    color: '#666',
-  },
-  bankCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 12,
-    gap: 12,
-  },
-  bankInfo: {
-    flex: 1,
-  },
-  bankName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 2,
-  },
-  bankAccount: {
-    fontSize: 14,
-    color: '#666',
-  },
-  changeButton: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#007AFF',
-  },
-  withdrawButton: {
-    backgroundColor: '#007AFF',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  withdrawButtonDisabled: {
-    backgroundColor: '#ccc',
-  },
-  withdrawButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  historySection: {
-    marginTop: 32,
-  },
-  transactionItem: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
   },
-  transactionTitle: {
-    fontSize: 14,
+  bookTitle: {
+    fontSize: 15,
     fontWeight: '600',
-    color: '#1a1a1a',
     marginBottom: 4,
   },
-  transactionDate: {
+  bookAuthor: {
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  bookFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  ratingText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  progressContainer: {
+    backgroundColor: theme.background,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  progressText: {
     fontSize: 12,
-    color: '#666',
+    fontWeight: '600',
   },
-  transactionAmount: {
+  emptyBooks: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 14,
+    marginTop: 12,
+  },
+  errorText: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#4CAF50',
-  },
-  transactionNegative: {
-    color: '#ff3b30',
   },
 });
