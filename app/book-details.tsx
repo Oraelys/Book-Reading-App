@@ -1,3 +1,4 @@
+// app/book-details.tsx - Updated with theme support
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -14,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Star, Eye, Book, MessageCircle, Play } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContexts';
 
 interface BookDetails {
   id: string;
@@ -39,18 +41,18 @@ export default function BookDetailsScreen() {
   const params = useLocalSearchParams();
   const bookId = params.bookId as string;
   const { user } = useAuth();
+  const { theme, isDark } = useTheme();
   const [book, setBook] = useState<BookDetails | null>(null);
   const [progress, setProgress] = useState<ReadingProgress | null>(null);
   const [loading, setLoading] = useState(true);
   const [isInLibrary, setIsInLibrary] = useState(false);
 
+  const styles = getStyles(theme, isDark);
+
   useEffect(() => {
-    console.log('BookDetails - Params:', params);
-    console.log('BookDetails - BookId:', bookId);
     if (bookId) {
       loadBookDetails();
     } else {
-      console.error('No bookId provided');
       setLoading(false);
     }
   }, [bookId]);
@@ -59,7 +61,6 @@ export default function BookDetailsScreen() {
     if (!bookId || !user) return;
 
     try {
-      // Load book details
       const { data: bookData, error: bookError } = await supabase
         .from('novels')
         .select('*')
@@ -69,7 +70,6 @@ export default function BookDetailsScreen() {
       if (bookError) throw bookError;
       setBook(bookData);
 
-      // Check if book is in user's library (has reading progress)
       const { data: progressData } = await supabase
         .from('reading_progress')
         .select('progress_percentage, current_page')
@@ -94,7 +94,6 @@ export default function BookDetailsScreen() {
     if (!user || !book) return;
 
     try {
-      // Create reading progress entry
       const { error } = await supabase
         .from('reading_progress')
         .insert({
@@ -148,7 +147,7 @@ export default function BookDetailsScreen() {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
   }
@@ -171,7 +170,7 @@ export default function BookDetailsScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
-          <ArrowLeft size={24} color="#1a1a1a" />
+          <ArrowLeft size={24} color={theme.text} />
         </TouchableOpacity>
       </View>
 
@@ -195,7 +194,7 @@ export default function BookDetailsScreen() {
                 </Text>
               </View>
               <View style={styles.statItem}>
-                <Eye size={16} color="#666" />
+                <Eye size={16} color={theme.textSecondary} />
                 <Text style={styles.statText}>{book.views} views</Text>
               </View>
             </View>
@@ -206,7 +205,7 @@ export default function BookDetailsScreen() {
           </View>
         </View>
 
-        {/* Progress Card (if in library) */}
+        {/* Progress Card */}
         {isInLibrary && progress && (
           <View style={styles.progressCard}>
             <View style={styles.progressHeader}>
@@ -246,7 +245,7 @@ export default function BookDetailsScreen() {
               style={styles.secondaryButton}
               onPress={handleAddToLibrary}
             >
-              <Book size={20} color="#007AFF" />
+              <Book size={20} color={theme.primary} />
               <Text style={styles.secondaryButtonText}>Add to Library</Text>
             </TouchableOpacity>
           )}
@@ -255,7 +254,7 @@ export default function BookDetailsScreen() {
             style={styles.secondaryButton}
             onPress={handleViewComments}
           >
-            <MessageCircle size={20} color="#007AFF" />
+            <MessageCircle size={20} color={theme.primary} />
             <Text style={styles.secondaryButtonText}>Comments</Text>
           </TouchableOpacity>
         </View>
@@ -293,16 +292,16 @@ export default function BookDetailsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.background,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: theme.background,
   },
   header: {
     flexDirection: 'row',
@@ -336,13 +335,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1a1a1a',
+    color: theme.text,
     textAlign: 'center',
     marginBottom: 8,
   },
   author: {
     fontSize: 16,
-    color: '#666',
+    color: theme.textSecondary,
     marginBottom: 16,
   },
   statsRow: {
@@ -357,11 +356,11 @@ const styles = StyleSheet.create({
   },
   statText: {
     fontSize: 14,
-    color: '#666',
+    color: theme.textSecondary,
     fontWeight: '600',
   },
   categoryContainer: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: theme.primary + '20',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
@@ -369,12 +368,12 @@ const styles = StyleSheet.create({
   categoryText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#007AFF',
+    color: theme.primary,
   },
   progressCard: {
     marginHorizontal: 24,
     padding: 20,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: theme.surface,
     borderRadius: 16,
     marginBottom: 24,
   },
@@ -387,28 +386,28 @@ const styles = StyleSheet.create({
   progressTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: theme.text,
   },
   progressPercentage: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#007AFF',
+    color: theme.primary,
   },
   progressBar: {
     height: 8,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: theme.border,
     borderRadius: 4,
     marginBottom: 8,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
     borderRadius: 4,
   },
   progressText: {
     fontSize: 12,
-    color: '#666',
+    color: theme.textSecondary,
   },
   actionContainer: {
     paddingHorizontal: 24,
@@ -419,7 +418,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
@@ -433,7 +432,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: theme.surface,
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
@@ -441,7 +440,7 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#007AFF',
+    color: theme.primary,
   },
   section: {
     paddingHorizontal: 24,
@@ -450,37 +449,37 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1a1a1a',
+    color: theme.text,
     marginBottom: 16,
   },
   description: {
     fontSize: 15,
     lineHeight: 24,
-    color: '#666',
+    color: theme.textSecondary,
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: theme.border,
   },
   infoLabel: {
     fontSize: 14,
-    color: '#666',
+    color: theme.textSecondary,
   },
   infoValue: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: theme.text,
   },
   errorText: {
     fontSize: 18,
-    color: '#666',
+    color: theme.textSecondary,
     marginBottom: 24,
   },
   backButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,

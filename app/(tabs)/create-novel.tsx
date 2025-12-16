@@ -1,3 +1,4 @@
+// app/(tabs)/create-novel.tsx - Updated with theme support
 import React, { useState } from 'react';
 import {
   View,
@@ -13,6 +14,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContexts';
 import { supabase } from '@/lib/supabase';
 import * as DocumentPicker from 'expo-document-picker';
 import { Upload, Image as ImageIcon } from 'lucide-react-native';
@@ -20,11 +22,14 @@ import { Upload, Image as ImageIcon } from 'lucide-react-native';
 export default function CreateNovelScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { theme, isDark } = useTheme();
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [coverImage, setCoverImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const styles = getStyles(theme, isDark);
 
   const pickCoverImage = async () => {
     try {
@@ -115,7 +120,7 @@ export default function CreateNovelScreen() {
               <Image source={{ uri: coverImage }} style={styles.coverPreview} />
             ) : (
               <View style={styles.imagePlaceholder}>
-                <ImageIcon size={48} color="#666" />
+                <ImageIcon size={48} color={theme.textSecondary} />
                 <Text style={styles.imagePlaceholderText}>
                   Tap to add cover image
                 </Text>
@@ -126,6 +131,7 @@ export default function CreateNovelScreen() {
           <TextInput
             style={styles.input}
             placeholder="Novel Title"
+            placeholderTextColor={theme.placeholder}
             value={title}
             onChangeText={setTitle}
             editable={!loading}
@@ -134,6 +140,7 @@ export default function CreateNovelScreen() {
           <TextInput
             style={styles.input}
             placeholder="Author Name"
+            placeholderTextColor={theme.placeholder}
             value={author}
             onChangeText={setAuthor}
             editable={!loading}
@@ -164,10 +171,10 @@ export default function CreateNovelScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.background,
   },
   content: {
     padding: 24,
@@ -176,17 +183,19 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 8,
+    color: theme.text,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: theme.textSecondary,
     marginBottom: 8,
   },
   note: {
     fontSize: 13,
-    color: '#999',
+    color: theme.textSecondary,
     fontStyle: 'italic',
     marginBottom: 24,
+    opacity: 0.7,
   },
   form: {
     width: '100%',
@@ -206,29 +215,31 @@ const styles = StyleSheet.create({
   imagePlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.surface,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#ddd',
+    borderColor: theme.border,
     borderStyle: 'dashed',
     borderRadius: 12,
   },
   imagePlaceholderText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: theme.textSecondary,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: theme.border,
     borderRadius: 8,
     padding: 16,
     fontSize: 16,
     marginBottom: 16,
+    backgroundColor: theme.surface,
+    color: theme.text,
   },
   button: {
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
@@ -248,11 +259,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   cancelButtonText: {
-    color: '#007AFF',
+    color: theme.primary,
     fontSize: 16,
   },
   error: {
-    color: '#ff3b30',
+    color: theme.error,
     fontSize: 14,
     marginBottom: 16,
     textAlign: 'center',

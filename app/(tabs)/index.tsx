@@ -1,3 +1,4 @@
+// app/(tabs)/index.tsx - Updated with theme support
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -14,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContexts';
 import { BookOpen, TrendingUp, Star, Search } from 'lucide-react-native';
 
 interface Novel {
@@ -40,6 +42,7 @@ interface UserProfile {
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { theme, isDark } = useTheme();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [continueReading, setContinueReading] = useState<Novel[]>([]);
   const [lastReadBooks, setLastReadBooks] = useState<Novel[]>([]);
@@ -51,6 +54,8 @@ export default function HomeScreen() {
   const [readingGoal, setReadingGoal] = useState({ current: 0, total: 10 });
 
   const categories = ['All', 'Romance', 'Mystery', 'Fantasy', 'Sci-Fi', 'Thriller'];
+
+  const styles = getStyles(theme, isDark);
 
   useEffect(() => {
     loadData();
@@ -68,7 +73,6 @@ export default function HomeScreen() {
     if (!user) return;
 
     try {
-      // Try to load user profile from database with error handling
       try {
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
@@ -82,10 +86,7 @@ export default function HomeScreen() {
 
         if (profileData) {
           setProfile(profileData);
-          console.log('Profile loaded successfully:', profileData);
         } else {
-          // Profile doesn't exist, create a default one
-          console.log('Profile not found, creating default profile');
           const username = user.email?.split('@')[0] || 'user';
           
           const { data: newProfile, error: createError } = await supabase
@@ -99,30 +100,18 @@ export default function HomeScreen() {
             .select('username, avatar_url')
             .single();
 
-          if (createError) {
-            console.log('Could not create profile:', createError.message);
-          } else if (newProfile) {
+          if (!createError && newProfile) {
             setProfile(newProfile);
-            console.log('Profile created successfully');
           }
         }
       } catch (profileError) {
-        console.log('Could not load profile, using email as fallback');
+        console.log('Could not load profile');
       }
 
-      // Load books user is currently reading
       await loadContinueReading();
-      
-      // Load last read books for goals section
       await loadLastReadBooks();
-      
-      // Load featured books
       await loadFeaturedBooks();
-      
-      // Load popular books
       await loadPopularBooks();
-
-      // Calculate reading goal
       await calculateReadingGoal();
 
     } catch (error) {
@@ -391,7 +380,7 @@ export default function HomeScreen() {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
   }
@@ -407,12 +396,12 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#007AFF"
-            colors={['#007AFF']}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
           />
         }
       >
-        {/* Header Section with Search */}
+        {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Text style={styles.greeting}>Hello {username}!</Text>
@@ -423,7 +412,7 @@ export default function HomeScreen() {
               style={styles.searchButton}
               onPress={() => router.push('/search-books' as any)}
             >
-              <Search size={24} color="#007AFF" />
+              <Search size={24} color={theme.primary} />
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.profileButton}
@@ -445,7 +434,7 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Reading Goal Card with Last Read Books */}
+        {/* Reading Goal Card */}
         <View style={styles.goalCard}>
           <View style={styles.goalHeader}>
             <Text style={styles.goalTitle}>Your Goal</Text>
@@ -490,7 +479,7 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* Continue Reading Section */}
+        {/* Continue Reading */}
         {continueReading.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -506,7 +495,7 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Categories Section */}
+        {/* Categories */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle1}>Categories</Text>
           <ScrollView 
@@ -536,7 +525,7 @@ export default function HomeScreen() {
           </ScrollView>
         </View>
 
-        {/* Featured/Category Books Section */}
+        {/* Featured Books */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>
@@ -549,7 +538,7 @@ export default function HomeScreen() {
           
           {featuredBooks.length === 0 ? (
             <View style={styles.emptyPopular}>
-              <BookOpen size={48} color="#ddd" />
+              <BookOpen size={48} color={theme.border} />
               <Text style={styles.emptyText}>No books in this category yet</Text>
             </View>
           ) : (
@@ -564,7 +553,7 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* Popular Books Section */}
+        {/* Popular Books */}
         {selectedCategory === 'All' && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -588,7 +577,7 @@ export default function HomeScreen() {
         {/* Empty State */}
         {continueReading.length === 0 && featuredBooks.length === 0 && (
           <View style={styles.emptyState}>
-            <BookOpen size={64} color="#ddd" />
+            <BookOpen size={64} color={theme.border} />
             <Text style={styles.emptyTitle}>Discover Amazing Books</Text>
             <Text style={styles.emptySubtitle}>
               Browse our library to start your reading journey
@@ -606,17 +595,16 @@ export default function HomeScreen() {
   );
 }
 
-// ... (styles remain the same as before)
-
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.background,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: theme.background,
   },
   header: {
     flexDirection: 'row',
@@ -637,18 +625,18 @@ const styles = StyleSheet.create({
   greeting: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1a1a1a',
+    color: theme.text,
     marginBottom: 4,
   },
   subGreeting: {
     fontSize: 14,
-    color: '#666',
+    color: theme.textSecondary,
   },
   searchButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: theme.surface,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -664,7 +652,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -676,7 +664,7 @@ const styles = StyleSheet.create({
   goalCard: {
     marginHorizontal: 20,
     padding: 20,
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
     borderRadius: 16,
     marginBottom: 24,
   },
@@ -787,17 +775,17 @@ const styles = StyleSheet.create({
   sectionTitle1: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1a1a1a',
+    color: theme.text,
     marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1a1a1a',
+    color: theme.text,
   },
   seeAll: {
     fontSize: 14,
-    color: '#007AFF',
+    color: theme.primary,
     fontWeight: '600',
   },
   continueList: {
@@ -805,7 +793,7 @@ const styles = StyleSheet.create({
   },
   continueCard: {
     flexDirection: 'row',
-    backgroundColor: '#f8f8f8',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
@@ -823,29 +811,29 @@ const styles = StyleSheet.create({
   continueTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: theme.text,
     marginBottom: 4,
   },
   continueAuthor: {
     fontSize: 13,
-    color: '#666',
+    color: theme.textSecondary,
     marginBottom: 8,
   },
   progressBar: {
     height: 4,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: theme.border,
     borderRadius: 2,
     overflow: 'hidden',
     marginBottom: 4,
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
     borderRadius: 2,
   },
   progressText: {
     fontSize: 11,
-    color: '#666',
+    color: theme.textSecondary,
   },
   categoryContainer: {
     flexDirection: 'row',
@@ -855,16 +843,16 @@ const styles = StyleSheet.create({
   categoryChip: {
     paddingHorizontal: 20,
     paddingVertical: 8,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: theme.surface,
     borderRadius: 20,
   },
   categoryChipActive: {
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
   },
   categoryText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666',
+    color: theme.textSecondary,
   },
   categoryTextActive: {
     color: '#fff',
@@ -889,7 +877,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -919,12 +907,12 @@ const styles = StyleSheet.create({
   bookCardTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: theme.text,
     marginBottom: 4,
   },
   bookCardAuthor: {
     fontSize: 12,
-    color: '#666',
+    color: theme.textSecondary,
   },
   emptyPopular: {
     alignItems: 'center',
@@ -932,7 +920,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#999',
+    color: theme.textSecondary,
     marginTop: 12,
   },
   emptyState: {
@@ -943,18 +931,18 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1a1a1a',
+    color: theme.text,
     marginTop: 16,
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: '#666',
+    color: theme.textSecondary,
     marginBottom: 24,
     textAlign: 'center',
   },
   addBookButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
     paddingHorizontal: 32,
     paddingVertical: 12,
     borderRadius: 24,

@@ -1,3 +1,4 @@
+// app/(tabs)/library-screen.tsx - Updated with theme support
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -16,6 +17,7 @@ import { BookOpen, Search, Star, TrendingUp, Filter, Plus } from 'lucide-react-n
 import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContexts';
 
 interface Novel {
   id: string;
@@ -37,6 +39,7 @@ interface Novel {
 export default function LibraryScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { theme, isDark } = useTheme();
   const [books, setBooks] = useState<Novel[]>([]);
   const [filteredBooks, setFilteredBooks] = useState<Novel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +49,8 @@ export default function LibraryScreen() {
   const [sortBy, setSortBy] = useState<'recent' | 'progress' | 'title'>('recent');
 
   const categories = ['All', 'Romance', 'Mystery', 'Fantasy', 'Sci-Fi', 'Thriller'];
+
+  const styles = getStyles(theme, isDark);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -57,7 +62,6 @@ export default function LibraryScreen() {
     if (!user) return;
 
     try {
-      // Get all books that user has reading progress for (i.e., in their library)
       let query = supabase
         .from('reading_progress')
         .select(`
@@ -78,7 +82,6 @@ export default function LibraryScreen() {
         `)
         .eq('user_id', user.id);
 
-      // Sort based on selection
       if (sortBy === 'recent') {
         query = query.order('last_read', { ascending: false });
       } else if (sortBy === 'progress') {
@@ -90,9 +93,8 @@ export default function LibraryScreen() {
       if (error) throw error;
 
       if (progressData) {
-        // Transform data to include progress with book details
         let booksWithProgress = progressData
-          .filter(item => item.novels) // Filter out any null novels
+          .filter(item => item.novels)
           .map(item => ({
             ...(item.novels as any),
             reading_progress: {
@@ -102,14 +104,12 @@ export default function LibraryScreen() {
             },
           }));
 
-        // Filter by category if not "All"
         if (selectedCategory !== 'All') {
           booksWithProgress = booksWithProgress.filter(
             book => book.category === selectedCategory
           );
         }
 
-        // Sort by title if selected
         if (sortBy === 'title') {
           booksWithProgress.sort((a, b) => a.title.localeCompare(b.title));
         }
@@ -130,7 +130,6 @@ export default function LibraryScreen() {
     setRefreshing(false);
   };
 
-  // Search filter
   useEffect(() => {
     if (searchQuery.trim() === '') {
       setFilteredBooks(books);
@@ -146,14 +145,12 @@ export default function LibraryScreen() {
   }, [searchQuery, books]);
 
   const handleBookPress = async (bookId: string) => {
-    // Increment views
     try {
       await supabase.rpc('increment_book_views', { book_id: bookId });
     } catch (error) {
       console.error('Error incrementing views:', error);
     }
 
-    console.log('Navigating to book details:', bookId);
     router.push({
       pathname: '/book-details',
       params: { bookId: bookId }
@@ -161,9 +158,7 @@ export default function LibraryScreen() {
   };
 
   const handleBrowseAllBooks = () => {
-    // Navigate to a browse/discover screen where users can find and add new books
-    // For now, we'll just show an alert
-    alert('Browse feature coming soon! This will show all public books you can add to your library.');
+    router.push('/search-books' as any);
   };
 
   const renderListItem = ({ item }: { item: Novel }) => (
@@ -219,7 +214,7 @@ export default function LibraryScreen() {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
   }
@@ -233,10 +228,11 @@ export default function LibraryScreen() {
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
-        <Search size={20} color="#666" style={styles.searchIcon} />
+        <Search size={20} color={theme.placeholder} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search your library..."
+          placeholderTextColor={theme.placeholder}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
@@ -275,7 +271,7 @@ export default function LibraryScreen() {
           style={[styles.sortButton, sortBy === 'recent' && styles.sortButtonActive]}
           onPress={() => setSortBy('recent')}
         >
-          <TrendingUp size={16} color={sortBy === 'recent' ? '#007AFF' : '#666'} />
+          <TrendingUp size={16} color={sortBy === 'recent' ? '#fff' : theme.textSecondary} />
           <Text style={[styles.sortText, sortBy === 'recent' && styles.sortTextActive]}>
             Recent
           </Text>
@@ -284,7 +280,7 @@ export default function LibraryScreen() {
           style={[styles.sortButton, sortBy === 'progress' && styles.sortButtonActive]}
           onPress={() => setSortBy('progress')}
         >
-          <Star size={16} color={sortBy === 'progress' ? '#007AFF' : '#666'} />
+          <Star size={16} color={sortBy === 'progress' ? '#fff' : theme.textSecondary} />
           <Text style={[styles.sortText, sortBy === 'progress' && styles.sortTextActive]}>
             Progress
           </Text>
@@ -293,7 +289,7 @@ export default function LibraryScreen() {
           style={[styles.sortButton, sortBy === 'title' && styles.sortButtonActive]}
           onPress={() => setSortBy('title')}
         >
-          <Filter size={16} color={sortBy === 'title' ? '#007AFF' : '#666'} />
+          <Filter size={16} color={sortBy === 'title' ? '#fff' : theme.textSecondary} />
           <Text style={[styles.sortText, sortBy === 'title' && styles.sortTextActive]}>
             Title
           </Text>
@@ -311,13 +307,13 @@ export default function LibraryScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#007AFF"
-            colors={['#007AFF']}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
           />
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <BookOpen size={64} color="#ccc" />
+            <BookOpen size={64} color={theme.border} />
             <Text style={styles.emptyTitle}>
               {searchQuery ? 'No books found' : 'Your library is empty'}
             </Text>
@@ -342,15 +338,16 @@ export default function LibraryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.background,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: theme.background,
   },
   header: {
     paddingHorizontal: 20,
@@ -359,11 +356,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#1a1a1a',
+    color: theme.text,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#666',
+    color: theme.textSecondary,
     marginTop: 4,
   },
   searchContainer: {
@@ -373,7 +370,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 16,
     height: 48,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.surface,
     borderRadius: 24,
   },
   searchIcon: {
@@ -382,7 +379,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#1a1a1a',
+    color: theme.text,
   },
   categoryScroll: {
     paddingHorizontal: 20,
@@ -393,18 +390,17 @@ const styles = StyleSheet.create({
   categoryChip: {
     paddingHorizontal: 20,
     paddingVertical: 8,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: theme.surface,
     borderRadius: 20,
     marginRight: 8,
-   
   },
   categoryChipActive: {
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
   },
   categoryText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666',
+    color: theme.textSecondary,
   },
   categoryTextActive: {
     color: '#fff',
@@ -420,20 +416,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.surface,
     borderRadius: 16,
     gap: 6,
   },
   sortButtonActive: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: theme.primary,
   },
   sortText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#666',
+    color: theme.textSecondary,
   },
   sortTextActive: {
-    color: '#007AFF',
+    color: '#fff',
   },
   listContentContainer: {
     paddingHorizontal: 20,
@@ -441,7 +437,7 @@ const styles = StyleSheet.create({
   },
   listItem: {
     flexDirection: 'row',
-    backgroundColor: '#f9f9f9',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
@@ -458,19 +454,20 @@ const styles = StyleSheet.create({
   listTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: theme.text,
     marginBottom: 4,
   },
   listAuthor: {
     fontSize: 13,
-    color: '#666',
+    color: theme.textSecondary,
     marginBottom: 6,
   },
   listDescription: {
     fontSize: 12,
-    color: '#888',
+    color: theme.textSecondary,
     lineHeight: 18,
     marginBottom: 8,
+    opacity: 0.8,
   },
   listFooter: {
     flexDirection: 'row',
@@ -486,10 +483,10 @@ const styles = StyleSheet.create({
   listRatingText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: theme.text,
   },
   listCategory: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: theme.primary + '20',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -497,23 +494,23 @@ const styles = StyleSheet.create({
   listCategoryText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#007AFF',
+    color: theme.primary,
   },
   listProgressBar: {
     height: 4,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: theme.border,
     borderRadius: 2,
     overflow: 'hidden',
     marginBottom: 4,
   },
   listProgressFill: {
     height: '100%',
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
     borderRadius: 2,
   },
   progressLabel: {
     fontSize: 11,
-    color: '#666',
+    color: theme.textSecondary,
   },
   emptyContainer: {
     flex: 1,
@@ -524,13 +521,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: theme.text,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
-    color: '#666',
+    color: theme.textSecondary,
     textAlign: 'center',
     marginBottom: 24,
   },
@@ -538,7 +535,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 24,

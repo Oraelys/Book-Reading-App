@@ -1,4 +1,4 @@
-// services/chatService.ts - OPTIMIZED VERSION
+// services/chatservices.ts - Updated with proper read tracking
 import { supabase } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
@@ -66,10 +66,8 @@ export interface StatusUpdate {
 }
 
 export class ChatService {
-  // Profile cache to avoid repeated fetches
   private static profileCache: Map<string, Profile> = new Map();
 
-  // Batch fetch multiple users at once
   static async getUsersByIds(userIds: string[]): Promise<Map<string, Profile>> {
     const uniqueIds: string[] = [...new Set(userIds)];
     const uncachedIds: string[] = uniqueIds.filter(id => !this.profileCache.has(id));
@@ -83,7 +81,6 @@ export class ChatService {
 
         if (error) throw error;
 
-        // Cache the results
         (data as Profile[] | null)?.forEach((profile: Profile) => {
           this.profileCache.set(profile.id, profile);
         });
@@ -101,12 +98,10 @@ export class ChatService {
     return result;
   }
 
-  // Clear cache when needed
   static clearProfileCache() {
     this.profileCache.clear();
   }
 
-  // Get single user (uses cache)
   static async getUserById(userId: string): Promise<Profile | null> {
     if (this.profileCache.has(userId)) {
       return this.profileCache.get(userId)!;
@@ -116,7 +111,6 @@ export class ChatService {
     return profiles.get(userId) || null;
   }
 
-  // User Search
   static async searchUsers(searchTerm: string): Promise<Profile[]> {
     try {
       const { data, error } = await supabase.rpc('search_users', {
@@ -125,7 +119,6 @@ export class ChatService {
 
       if (error) throw error;
       
-      // Cache search results
       data?.forEach(profile => {
         this.profileCache.set(profile.id, profile);
       });
@@ -137,7 +130,6 @@ export class ChatService {
     }
   }
 
-  // Get user profile by tag
   static async getUserByTag(userTag: string): Promise<Profile | null> {
     try {
       const { data, error } = await supabase
@@ -159,7 +151,6 @@ export class ChatService {
     }
   }
 
-  // Get or create DM room
   static async getOrCreateDMRoom(otherUserId: string): Promise<string | null> {
     try {
       const { data, error } = await supabase.rpc('get_or_create_dm_room', {
@@ -174,7 +165,6 @@ export class ChatService {
     }
   }
 
-  // Create group chat
   static async createGroupChat(name: string, description: string, memberIds: string[]): Promise<ChatRoom | null> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -211,18 +201,19 @@ export class ChatService {
     }
   }
 
-  // Get user's chat rooms (OPTIMIZED)
+  // UPDATED: Improved unread count calculation
   static async getUserChatRooms(userId: string): Promise<ChatRoom[]> {
     try {
       const { data: memberData, error: memberError } = await supabase
         .from('room_members')
-        .select('room_id')
+        .select('room_id, last_read_at')
         .eq('user_id', userId);
 
       if (memberError) throw memberError;
       if (!memberData || memberData.length === 0) return [];
 
       const roomIds = memberData.map(m => m.room_id);
+      const lastReadByRoom = new Map(memberData.map(m => [m.room_id, m.last_read_at]));
 
       const { data: rooms, error: roomsError } = await supabase
         .from('chat_rooms')
@@ -277,22 +268,28 @@ export class ChatService {
         }
       });
 
-      // Get unread counts
-      const { data: userMember } = await supabase
-        .from('room_members')
-        .select('room_id, last_read_at')
-        .eq('user_id', userId)
-        .in('room_id', roomIds);
-
+      // Calculate unread counts efficiently
       const unreadByRoom = new Map<string, number>();
-      if (userMember) {
-        for (const member of userMember) {
+      
+      for (const roomId of roomIds) {
+        const lastRead = lastReadByRoom.get(roomId);
+        if (!lastRead) {
+          // If no last_read_at, count all messages
           const { count } = await supabase
             .from('chat_messages')
             .select('*', { count: 'exact', head: true })
-            .eq('room_id', member.room_id)
-            .gt('created_at', member.last_read_at);
-          unreadByRoom.set(member.room_id, count || 0);
+            .eq('room_id', roomId)
+            .neq('user_id', userId); // Don't count own messages
+          unreadByRoom.set(roomId, count || 0);
+        } else {
+          // Count messages after last_read_at
+          const { count } = await supabase
+            .from('chat_messages')
+            .select('*', { count: 'exact', head: true })
+            .eq('room_id', roomId)
+            .neq('user_id', userId) // Don't count own messages
+            .gt('created_at', lastRead);
+          unreadByRoom.set(roomId, count || 0);
         }
       }
 
@@ -310,7 +307,6 @@ export class ChatService {
     }
   }
 
-  // Get room messages (OPTIMIZED)
   static async getRoomMessages(roomId: string, limit: number = 50): Promise<ChatMessage[]> {
     try {
       const { data, error } = await supabase
@@ -337,7 +333,6 @@ export class ChatService {
     }
   }
 
-  // Send text message (with optimistic update support)
   static async sendMessage(roomId: string, text: string, repliedTo?: string): Promise<ChatMessage | null> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -365,7 +360,6 @@ export class ChatService {
     }
   }
 
-  // Upload media to storage
   static async uploadMedia(uri: string, type: 'image' | 'video', roomId: string): Promise<string | null> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -398,7 +392,6 @@ export class ChatService {
     }
   }
 
-  // Send image message
   static async sendImage(roomId: string, caption?: string): Promise<ChatMessage | null> {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -438,7 +431,6 @@ export class ChatService {
     }
   }
 
-  // Send video message
   static async sendVideo(roomId: string, caption?: string): Promise<ChatMessage | null> {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -479,7 +471,6 @@ export class ChatService {
     }
   }
 
-  // Subscribe to room messages (with profile caching)
   static subscribeToMessages(roomId: string, callback: (message: ChatMessage) => void) {
     return supabase
       .channel(`room:${roomId}`)
@@ -507,23 +498,26 @@ export class ChatService {
       .subscribe();
   }
 
-  // Mark room as read
+  // UPDATED: Mark room as read with current timestamp
   static async markRoomAsRead(roomId: string): Promise<void> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      const now = new Date().toISOString();
+      
       await supabase
         .from('room_members')
-        .update({ last_read_at: new Date().toISOString() })
+        .update({ last_read_at: now })
         .eq('room_id', roomId)
         .eq('user_id', user.id);
+
+      console.log('Marked room as read:', roomId);
     } catch (error) {
       console.error('Error marking room as read:', error);
     }
   }
 
-  // Get room members (OPTIMIZED)
   static async getRoomMembers(roomId: string): Promise<RoomMember[]> {
     try {
       const { data, error } = await supabase
@@ -546,7 +540,6 @@ export class ChatService {
     }
   }
 
-  // Add member to room
   static async addMemberToRoom(roomId: string, userId: string): Promise<boolean> {
     try {
       const { error } = await supabase
@@ -565,7 +558,6 @@ export class ChatService {
     }
   }
 
-  // Remove member from room
   static async removeMemberFromRoom(roomId: string, userId: string): Promise<boolean> {
     try {
       const { error } = await supabase
@@ -582,7 +574,6 @@ export class ChatService {
     }
   }
 
-  // Get statuses from chat contacts (OPTIMIZED)
   static async getContactStatuses(userId: string): Promise<StatusUpdate[]> {
     try {
       const { data, error } = await supabase
@@ -596,7 +587,6 @@ export class ChatService {
       const userIds = [...new Set(data?.map(s => s.user_id) || [])];
       const profiles = await this.getUsersByIds(userIds);
 
-      // Batch check views
       const statusIds = data?.map(s => s.id) || [];
       const { data: viewsData } = await supabase
         .from('status_views')
@@ -617,7 +607,6 @@ export class ChatService {
     }
   }
 
-  // Create status
   static async createStatus(caption: string, mediaType: 'image' | 'video'): Promise<StatusUpdate | null> {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -658,7 +647,6 @@ export class ChatService {
     }
   }
 
-  // View status
   static async viewStatus(statusId: string): Promise<void> {
     try {
       const { data: { user } } = await supabase.auth.getUser();

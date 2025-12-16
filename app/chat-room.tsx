@@ -1,4 +1,4 @@
-// app/chat-room.tsx
+// app/chat-room.tsx - Fixed with real-time updates and theme support
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -24,34 +24,55 @@ export default function ChatRoomScreen() {
   const router = useRouter();
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
   const { user } = useAuth();
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [roomInfo, setRoomInfo] = useState<any>(null);
   const flatListRef = useRef<FlatList>(null);
+  const subscriptionRef = useRef<any>(null);
 
-  const styles = getStyles(theme);
+  const styles = getStyles(theme, isDark);
 
   useEffect(() => {
     if (roomId) {
       loadMessages();
       markAsRead();
-      
-      // Subscribe to new messages
-      const channel = ChatService.subscribeToMessages(roomId, (newMessage) => {
-        setMessages(prev => [...prev, newMessage]);
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-      });
-
-      return () => {
-        channel.unsubscribe();
-      };
+      setupRealtimeSubscription();
     }
+
+    return () => {
+      // Cleanup subscription on unmount
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe();
+      }
+    };
   }, [roomId]);
+
+  const setupRealtimeSubscription = () => {
+    if (!roomId) return;
+
+    // Subscribe to new messages
+    subscriptionRef.current = ChatService.subscribeToMessages(roomId, (newMessage) => {
+      console.log('New message received:', newMessage);
+      setMessages(prev => {
+        // Check if message already exists to avoid duplicates
+        if (prev.find(m => m.id === newMessage.id)) {
+          return prev;
+        }
+        return [...prev, newMessage];
+      });
+      
+      // Scroll to bottom when new message arrives
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+
+      // Mark as read if room is active
+      markAsRead();
+    });
+  };
 
   const loadMessages = async () => {
     if (!roomId) return;
@@ -80,14 +101,28 @@ export default function ChatRoomScreen() {
 
     setSending(true);
     const text = inputText.trim();
-    setInputText('');
+    setInputText(''); // Clear input immediately for better UX
 
     try {
-      await ChatService.sendMessage(roomId, text);
+      const sentMessage = await ChatService.sendMessage(roomId, text);
+      
+      if (sentMessage) {
+        // Add message optimistically
+        setMessages(prev => [...prev, sentMessage]);
+        
+        // Scroll to bottom
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      } else {
+        // Restore text if sending failed
+        setInputText(text);
+        Alert.alert('Error', 'Failed to send message');
+      }
     } catch (error) {
       console.error('Error sending message:', error);
+      setInputText(text); // Restore text on error
       Alert.alert('Error', 'Failed to send message');
-      setInputText(text);
     } finally {
       setSending(false);
     }
@@ -98,7 +133,13 @@ export default function ChatRoomScreen() {
 
     setSending(true);
     try {
-      await ChatService.sendImage(roomId);
+      const sentMessage = await ChatService.sendImage(roomId);
+      if (sentMessage) {
+        setMessages(prev => [...prev, sentMessage]);
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
     } catch (error) {
       console.error('Error sending image:', error);
       Alert.alert('Error', 'Failed to send image');
@@ -112,7 +153,13 @@ export default function ChatRoomScreen() {
 
     setSending(true);
     try {
-      await ChatService.sendVideo(roomId);
+      const sentMessage = await ChatService.sendVideo(roomId);
+      if (sentMessage) {
+        setMessages(prev => [...prev, sentMessage]);
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
     } catch (error) {
       console.error('Error sending video:', error);
       Alert.alert('Error', 'Failed to send video');
@@ -155,7 +202,7 @@ export default function ChatRoomScreen() {
           isOwn ? styles.messageBubbleOwn : styles.messageBubbleOther
         ]}>
           {!isOwn && (
-            <Text style={[styles.senderName, { color: theme.primary }]}>
+            <Text style={styles.senderName}>
               {item.profile?.username || 'User'}
             </Text>
           )}
@@ -210,25 +257,25 @@ export default function ChatRoomScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.centerContainer, { backgroundColor: theme.background }]}>
+      <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: theme.border }]}>
+      <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color={theme.text} />
         </TouchableOpacity>
         
         <View style={styles.headerInfo}>
-          <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
             {roomInfo?.name || 'Chat'}
           </Text>
-          <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+          <Text style={styles.headerSubtitle}>
             Active now
           </Text>
         </View>
@@ -246,7 +293,12 @@ export default function ChatRoomScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.messagesList}
         showsVerticalScrollIndicator={false}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+        onContentSizeChange={() => {
+          // Auto-scroll to bottom when content size changes
+          if (messages.length > 0) {
+            flatListRef.current?.scrollToEnd({ animated: false });
+          }
+        }}
       />
 
       {/* Input */}
@@ -254,9 +306,9 @@ export default function ChatRoomScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderTopColor: theme.border }]}>
+        <View style={styles.inputContainer}>
           <TouchableOpacity
-            style={[styles.mediaButton, { backgroundColor: theme.background }]}
+            style={styles.mediaButton}
             onPress={handleMediaOptions}
             disabled={sending}
           >
@@ -264,7 +316,7 @@ export default function ChatRoomScreen() {
           </TouchableOpacity>
 
           <TextInput
-            style={[styles.input, { color: theme.text, backgroundColor: theme.background }]}
+            style={styles.input}
             placeholder="Type a message..."
             placeholderTextColor={theme.placeholder}
             value={inputText}
@@ -294,14 +346,16 @@ export default function ChatRoomScreen() {
   );
 }
 
-const getStyles = (theme: any) => StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: theme.background,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: theme.background,
   },
   header: {
     flexDirection: 'row',
@@ -309,6 +363,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
+    borderBottomColor: theme.border,
     gap: 12,
   },
   backButton: {
@@ -320,10 +375,12 @@ const getStyles = (theme: any) => StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
+    color: theme.text,
   },
   headerSubtitle: {
     fontSize: 12,
     marginTop: 2,
+    color: theme.textSecondary,
   },
   moreButton: {
     padding: 8,
@@ -365,6 +422,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     marginBottom: 4,
+    color: theme.primary,
   },
   messageImage: {
     width: 200,
@@ -417,6 +475,8 @@ const getStyles = (theme: any) => StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: 1,
+    borderTopColor: theme.border,
+    backgroundColor: theme.background,
     gap: 8,
   },
   mediaButton: {
@@ -425,6 +485,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: theme.surface,
   },
   input: {
     flex: 1,
@@ -434,6 +495,8 @@ const getStyles = (theme: any) => StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 15,
+    backgroundColor: theme.surface,
+    color: theme.text,
   },
   sendButton: {
     width: 40,

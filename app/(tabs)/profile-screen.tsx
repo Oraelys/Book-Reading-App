@@ -1,4 +1,4 @@
-// app/user-profile.tsx
+// app/(tabs)/profile-screen.tsx - Fixed version
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -8,169 +8,124 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  FlatList,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MessageCircle, BookOpen, Star } from 'lucide-react-native';
-import { ChatService, Profile } from '@/services/chatservices';
+import { useRouter } from 'expo-router';
+import { Settings, Moon, Sun, Monitor, LogOut, User, Mail } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContexts';
 import { supabase } from '@/lib/supabase';
 
-interface UserBook {
-  id: string;
-  title: string;
-  author: string;
-  cover_image_url: string;
-  rating: number;
-  progress_percentage: number;
+interface Profile {
+  username: string;
+  user_tag: string;
+  email: string;
+  avatar_url: string | null;
+  bio: string | null;
 }
 
-interface UserStats {
-  total_books: number;
-  completed_books: number;
-  reading_books: number;
-  average_progress: number;
-}
-
-export default function UserProfileScreen() {
+export default function ProfileScreen() {
   const router = useRouter();
-  const { userId } = useLocalSearchParams<{ userId: string }>();
-  const { user: currentUser } = useAuth();
-  const { theme } = useTheme();
+  const { user, signOut } = useAuth();
+  const { theme, isDark, themeMode, setThemeMode } = useTheme();
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [books, setBooks] = useState<UserBook[]>([]);
-  const [stats, setStats] = useState<UserStats>({
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
     total_books: 0,
     completed_books: 0,
     reading_books: 0,
-    average_progress: 0,
   });
-  const [loading, setLoading] = useState(true);
-  const [startingChat, setStartingChat] = useState(false);
-  const [activeTab, setActiveTab] = useState<'reading' | 'completed'>('reading');
 
-  const styles = getStyles(theme);
+  const styles = getStyles(theme, isDark);
 
   useEffect(() => {
-    if (userId) {
-      loadProfileData();
+    if (user) {
+      loadProfile();
     }
-  }, [userId]);
+  }, [user]);
 
-  const loadProfileData = async () => {
-    if (!userId) return;
+  const loadProfile = async () => {
+    if (!user) return;
 
     try {
+      setLoading(true);
+      
       // Load profile
-      const profileData = await ChatService.getUserById(userId);
-      setProfile(profileData);
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('username, user_tag, email, avatar_url, bio')
+        .eq('id', user.id)
+        .single();
 
-      // Load user's reading progress and books
-      const { data: progressData, error } = await supabase
+      if (profileError) {
+        console.error('Profile error:', profileError);
+        // Create default profile if doesn't exist
+        const username = user.email?.split('@')[0] || 'user';
+        const { data: newProfile } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            username: username,
+            user_tag: `@${username}`,
+            email: user.email || '',
+            avatar_url: null,
+          })
+          .select('username, user_tag, email, avatar_url, bio')
+          .single();
+        
+        if (newProfile) {
+          setProfile(newProfile);
+        }
+      } else {
+        setProfile(profileData);
+      }
+
+      // Load stats
+      const { data: progressData } = await supabase
         .from('reading_progress')
-        .select(`
-          progress_percentage,
-          current_page,
-          last_read,
-          novels:book_id (
-            id,
-            title,
-            author,
-            cover_image_url,
-            rating
-          )
-        `)
-        .eq('user_id', userId)
-        .order('last_read', { ascending: false });
-
-      if (error) throw error;
+        .select('progress_percentage')
+        .eq('user_id', user.id);
 
       if (progressData) {
-        const userBooks: UserBook[] = progressData
-          .filter(item => item.novels)
-          .map(item => ({
-            ...(item.novels as any),
-            progress_percentage: item.progress_percentage,
-          }));
-
-        setBooks(userBooks);
-
-        // Calculate stats
-        const completed = userBooks.filter(b => b.progress_percentage >= 100).length;
-        const reading = userBooks.filter(b => b.progress_percentage > 0 && b.progress_percentage < 100).length;
-        const avgProgress = userBooks.length > 0
-          ? userBooks.reduce((sum, b) => sum + b.progress_percentage, 0) / userBooks.length
-          : 0;
+        const completed = progressData.filter(p => p.progress_percentage >= 100).length;
+        const reading = progressData.filter(p => p.progress_percentage > 0 && p.progress_percentage < 100).length;
 
         setStats({
-          total_books: userBooks.length,
+          total_books: progressData.length,
           completed_books: completed,
           reading_books: reading,
-          average_progress: avgProgress,
         });
       }
+
     } catch (error) {
-      console.error('Error loading profile data:', error);
+      console.error('Error loading profile:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleStartChat = async () => {
-    if (!userId || !profile) return;
-
-    setStartingChat(true);
-    try {
-      const roomId = await ChatService.getOrCreateDMRoom(userId);
-      if (roomId) {
-        router.push(`/chat-room?roomId=${roomId}`);
-      }
-    } catch (error) {
-      console.error('Error starting chat:', error);
-    } finally {
-      setStartingChat(false);
-    }
+  const handleSignOut = async () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            await signOut();
+            router.replace('/login');
+          },
+        },
+      ]
+    );
   };
 
-  const handleBookPress = (bookId: string) => {
-    router.push(`/book-details?bookId=${bookId}`);
+  const handleThemeChange = (mode: 'light' | 'dark' | 'auto') => {
+    setThemeMode(mode);
   };
-
-  const renderBookItem = ({ item }: { item: UserBook }) => (
-    <TouchableOpacity
-      style={styles.bookCard}
-      onPress={() => handleBookPress(item.id)}
-    >
-      <Image
-        source={{ uri: item.cover_image_url }}
-        style={styles.bookCover}
-        defaultSource={require('@/assets/images/book-placeholder.png')}
-      />
-      <View style={styles.bookInfo}>
-        <Text style={[styles.bookTitle, { color: theme.text }]} numberOfLines={2}>
-          {item.title}
-        </Text>
-        <Text style={[styles.bookAuthor, { color: theme.textSecondary }]} numberOfLines={1}>
-          {item.author}
-        </Text>
-        <View style={styles.bookFooter}>
-          <View style={styles.ratingContainer}>
-            <Star size={14} color="#FFD700" fill="#FFD700" />
-            <Text style={[styles.ratingText, { color: theme.text }]}>
-              {item.rating.toFixed(1)}
-            </Text>
-          </View>
-          <View style={styles.progressContainer}>
-            <Text style={[styles.progressText, { color: theme.primary }]}>
-              {Math.round(item.progress_percentage)}%
-            </Text>
-          </View>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
 
   if (loading) {
     return (
@@ -180,60 +135,48 @@ export default function UserProfileScreen() {
     );
   }
 
-  if (!profile) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color={theme.text} />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.centerContainer}>
-          <Text style={[styles.errorText, { color: theme.text }]}>User not found</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const isOwnProfile = currentUser?.id === userId;
-  const readingBooks = books.filter(b => b.progress_percentage > 0 && b.progress_percentage < 100);
-  const completedBooks = books.filter(b => b.progress_percentage >= 100);
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: theme.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color={theme.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>Profile</Text>
-        <View style={styles.placeholder} />
-      </View>
-
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Profile Header */}
-        <View style={styles.profileHeader}>
-          <Image
-            source={{ uri: profile.avatar_url || 'https://via.placeholder.com/120' }}
-            style={styles.avatar}
-          />
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>Profile</Text>
+          <TouchableOpacity style={styles.settingsButton}>
+            <Settings size={24} color={theme.text} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Profile Info */}
+        <View style={styles.profileSection}>
+          <View style={styles.avatarContainer}>
+            {profile?.avatar_url ? (
+              <Image
+                source={{ uri: profile.avatar_url }}
+                style={styles.avatar}
+              />
+            ) : (
+              <View style={[styles.avatarPlaceholder, { backgroundColor: theme.primary }]}>
+                <User size={48} color="#fff" />
+              </View>
+            )}
+          </View>
+
           <Text style={[styles.username, { color: theme.text }]}>
-            {profile.username}
+            {profile?.username || 'User'}
           </Text>
           <Text style={[styles.userTag, { color: theme.textSecondary }]}>
-            {profile.user_tag}
+            {profile?.user_tag || '@user'}
           </Text>
-          {profile.bio && (
+          {profile?.bio && (
             <Text style={[styles.bio, { color: theme.textSecondary }]}>
               {profile.bio}
             </Text>
           )}
         </View>
 
-        {/* Stats Cards */}
+        {/* Stats */}
         <View style={styles.statsContainer}>
           <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
-            <BookOpen size={24} color={theme.primary} />
             <Text style={[styles.statValue, { color: theme.text }]}>
               {stats.total_books}
             </Text>
@@ -243,7 +186,15 @@ export default function UserProfileScreen() {
           </View>
 
           <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
-            <Star size={24} color="#FFD700" />
+            <Text style={[styles.statValue, { color: theme.text }]}>
+              {stats.reading_books}
+            </Text>
+            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
+              Reading
+            </Text>
+          </View>
+
+          <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
             <Text style={[styles.statValue, { color: theme.text }]}>
               {stats.completed_books}
             </Text>
@@ -251,114 +202,102 @@ export default function UserProfileScreen() {
               Completed
             </Text>
           </View>
+        </View>
 
-          <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
-            <Text style={[styles.statValue, { color: theme.primary }]}>
-              {Math.round(stats.average_progress)}%
-            </Text>
-            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
-              Avg Progress
-            </Text>
+        {/* Account Info */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>
+            Account
+          </Text>
+          
+          <View style={[styles.infoCard, { backgroundColor: theme.surface }]}>
+            <View style={styles.infoRow}>
+              <Mail size={20} color={theme.textSecondary} />
+              <View style={styles.infoContent}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>
+                  Email
+                </Text>
+                <Text style={[styles.infoValue, { color: theme.text }]}>
+                  {profile?.email || user?.email || 'Not set'}
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
 
-        {/* Action Button */}
-        {!isOwnProfile && (
-          <View style={styles.actionContainer}>
-            <TouchableOpacity
-              style={[styles.primaryButton, { backgroundColor: theme.primary }]}
-              onPress={handleStartChat}
-              disabled={startingChat}
-            >
-              {startingChat ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <MessageCircle size={20} color="#fff" />
-                  <Text style={styles.primaryButtonText}>Send Message</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* Theme Settings */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>
+            Appearance
+          </Text>
 
-        {/* Books Section */}
-        <View style={styles.booksSection}>
-          <View style={styles.tabsContainer}>
+          <View style={[styles.themeContainer, { backgroundColor: theme.surface }]}>
             <TouchableOpacity
               style={[
-                styles.tab,
-                activeTab === 'reading' && [styles.tabActive, { borderBottomColor: theme.primary }]
+                styles.themeOption,
+                themeMode === 'light' && { backgroundColor: theme.primary },
               ]}
-              onPress={() => setActiveTab('reading')}
+              onPress={() => handleThemeChange('light')}
             >
+              <Sun size={24} color={themeMode === 'light' ? '#fff' : theme.text} />
               <Text style={[
-                styles.tabText,
-                { color: activeTab === 'reading' ? theme.primary : theme.textSecondary }
+                styles.themeText,
+                { color: themeMode === 'light' ? '#fff' : theme.text }
               ]}>
-                Reading ({readingBooks.length})
+                Light
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
-                styles.tab,
-                activeTab === 'completed' && [styles.tabActive, { borderBottomColor: theme.primary }]
+                styles.themeOption,
+                themeMode === 'dark' && { backgroundColor: theme.primary },
               ]}
-              onPress={() => setActiveTab('completed')}
+              onPress={() => handleThemeChange('dark')}
             >
+              <Moon size={24} color={themeMode === 'dark' ? '#fff' : theme.text} />
               <Text style={[
-                styles.tabText,
-                { color: activeTab === 'completed' ? theme.primary : theme.textSecondary }
+                styles.themeText,
+                { color: themeMode === 'dark' ? '#fff' : theme.text }
               ]}>
-                Completed ({completedBooks.length})
+                Dark
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.themeOption,
+                themeMode === 'auto' && { backgroundColor: theme.primary },
+              ]}
+              onPress={() => handleThemeChange('auto')}
+            >
+              <Monitor size={24} color={themeMode === 'auto' ? '#fff' : theme.text} />
+              <Text style={[
+                styles.themeText,
+                { color: themeMode === 'auto' ? '#fff' : theme.text }
+              ]}>
+                Auto
               </Text>
             </TouchableOpacity>
           </View>
+        </View>
 
-          {/* Books List */}
-          {activeTab === 'reading' ? (
-            readingBooks.length > 0 ? (
-              <FlatList
-                data={readingBooks}
-                renderItem={renderBookItem}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-                contentContainerStyle={styles.booksList}
-              />
-            ) : (
-              <View style={styles.emptyBooks}>
-                <BookOpen size={48} color={theme.border} />
-                <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-                  No books currently reading
-                </Text>
-              </View>
-            )
-          ) : (
-            completedBooks.length > 0 ? (
-              <FlatList
-                data={completedBooks}
-                renderItem={renderBookItem}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-                contentContainerStyle={styles.booksList}
-              />
-            ) : (
-              <View style={styles.emptyBooks}>
-                <Star size={48} color={theme.border} />
-                <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-                  No completed books yet
-                </Text>
-              </View>
-            )
-          )}
+        {/* Sign Out */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={[styles.signOutButton, { backgroundColor: theme.error }]}
+            onPress={handleSignOut}
+          >
+            <LogOut size={20} color="#fff" />
+            <Text style={styles.signOutText}>Sign Out</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const getStyles = (theme: any) => StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -369,42 +308,49 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
     justifyContent: 'space-between',
-  },
-  backButton: {
-    padding: 8,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 28,
     fontWeight: '700',
   },
-  placeholder: {
-    width: 40,
+  settingsButton: {
+    padding: 8,
   },
-  profileHeader: {
+  profileSection: {
     alignItems: 'center',
     paddingVertical: 32,
     paddingHorizontal: 24,
+  },
+  avatarContainer: {
+    marginBottom: 16,
   },
   avatar: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    marginBottom: 16,
+    borderWidth: 3,
+    borderColor: theme.border,
+  },
+  avatarPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 3,
     borderColor: theme.border,
   },
   username: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
     marginBottom: 4,
   },
   userTag: {
-    fontSize: 15,
+    fontSize: 16,
     marginBottom: 12,
   },
   bio: {
@@ -416,7 +362,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 20,
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   statCard: {
     flex: 1,
@@ -427,18 +373,59 @@ const getStyles = (theme: any) => StyleSheet.create({
   statValue: {
     fontSize: 24,
     fontWeight: '700',
-    marginTop: 8,
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
     textAlign: 'center',
   },
-  actionContainer: {
-    paddingHorizontal: 24,
+  section: {
+    paddingHorizontal: 20,
     marginBottom: 24,
   },
-  primaryButton: {
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  infoCard: {
+    padding: 16,
+    borderRadius: 12,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  infoContent: {
+    flex: 1,
+  },
+  infoLabel: {
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  infoValue: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  themeContainer: {
+    flexDirection: 'row',
+    padding: 8,
+    borderRadius: 12,
+    gap: 8,
+  },
+  themeOption: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 4,
+  },
+  themeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -446,96 +433,9 @@ const getStyles = (theme: any) => StyleSheet.create({
     borderRadius: 12,
     gap: 8,
   },
-  primaryButtonText: {
+  signOutText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-  },
-  booksSection: {
-    flex: 1,
-  },
-  tabsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  tabActive: {
-    borderBottomWidth: 2,
-  },
-  tabText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  booksList: {
-    padding: 20,
-    gap: 12,
-  },
-  bookCard: {
-    flexDirection: 'row',
-    backgroundColor: theme.surface,
-    borderRadius: 12,
-    padding: 12,
-  },
-  bookCover: {
-    width: 60,
-    height: 90,
-    borderRadius: 8,
-    marginRight: 12,
-  },
-  bookInfo: {
-    flex: 1,
-    justifyContent: 'space-between',
-  },
-  bookTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  bookAuthor: {
-    fontSize: 13,
-    marginBottom: 8,
-  },
-  bookFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  ratingText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  progressContainer: {
-    backgroundColor: theme.background,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  progressText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  emptyBooks: {
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyText: {
-    fontSize: 14,
-    marginTop: 12,
-  },
-  errorText: {
-    fontSize: 16,
   },
 });
