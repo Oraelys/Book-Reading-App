@@ -1,9 +1,8 @@
-// app/(tabs)/social.tsx - Updated with theme support
+// app/(tabs)/social.tsx - Enhanced with Status and Better Chat
 import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
   FlatList,
   TouchableOpacity,
   Image,
@@ -15,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Search, MessageCircle, Plus, Users, Image as ImageIcon, X } from 'lucide-react-native';
+import { Search, MessageCircle, Plus, Users, Image as ImageIcon, X, Camera } from 'lucide-react-native';
 import { ChatService, ChatRoom, StatusUpdate } from '@/services/chatservices';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContexts';
@@ -24,7 +23,6 @@ export default function SocialScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { theme, isDark } = useTheme();
-  const [searchQuery, setSearchQuery] = useState('');
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const [statuses, setStatuses] = useState<StatusUpdate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,7 +83,13 @@ export default function SocialScreen() {
     }, 200);
   };
 
-  const handleChatPress = (room: ChatRoom) => {
+  const handleChatPress = async (room: ChatRoom) => {
+    // Mark as read when opening
+    await ChatService.markRoomAsRead(room.id);
+    
+    // Refresh chat rooms to update unread count
+    loadData();
+    
     router.push(`/chat-room?roomId=${room.id}`);
   };
 
@@ -115,12 +119,13 @@ export default function SocialScreen() {
   const getLastMessage = (room: ChatRoom) => {
     if (!room.last_message) return 'No messages yet';
     
-    const { message_type, message_text, profile } = room.last_message;
-    const sender = profile?.username || 'Someone';
+    const { message_type, message_text, profile, user_id } = room.last_message;
+    const isOwn = user_id === user?.id;
+    const sender = isOwn ? 'You' : (profile?.username || 'Someone');
     
     if (message_type === 'image') return `${sender}: 📷 Photo`;
     if (message_type === 'video') return `${sender}: 🎥 Video`;
-    return message_text || '';
+    return `${isOwn ? 'You: ' : ''}${message_text || ''}`;
   };
 
   const renderStatusItem = ({ item }: { item: StatusUpdate }) => (
@@ -137,7 +142,7 @@ export default function SocialScreen() {
           style={styles.statusAvatar}
         />
       </View>
-      <Text style={styles.statusName} numberOfLines={1}>
+      <Text style={[styles.statusName, { color: theme.text }]} numberOfLines={1}>
         {item.profile?.username || 'User'}
       </Text>
     </TouchableOpacity>
@@ -163,7 +168,7 @@ export default function SocialScreen() {
             style={styles.chatAvatar}
           />
           {item.room_type === 'group' && (
-            <View style={styles.groupBadge}>
+            <View style={[styles.groupBadge, { backgroundColor: theme.primary }]}>
               <Users size={12} color="#fff" />
             </View>
           )}
@@ -171,20 +176,20 @@ export default function SocialScreen() {
 
         <View style={styles.chatInfo}>
           <View style={styles.chatHeader}>
-            <Text style={styles.chatName} numberOfLines={1}>
+            <Text style={[styles.chatName, { color: theme.text }]} numberOfLines={1}>
               {displayName}
             </Text>
-            <Text style={styles.chatTime}>
+            <Text style={[styles.chatTime, { color: theme.textSecondary }]}>
               {item.last_message ? formatTime(item.last_message.created_at) : ''}
             </Text>
           </View>
 
           <View style={styles.chatMessage}>
-            <Text style={styles.lastMessage} numberOfLines={1}>
+            <Text style={[styles.lastMessage, { color: theme.textSecondary }]} numberOfLines={1}>
               {getLastMessage(item)}
             </Text>
             {(item.unread_count || 0) > 0 && (
-              <View style={styles.unreadBadge}>
+              <View style={[styles.unreadBadge, { backgroundColor: theme.primary }]}>
                 <Text style={styles.unreadText}>
                   {item.unread_count! > 99 ? '99+' : item.unread_count}
                 </Text>
@@ -198,7 +203,7 @@ export default function SocialScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
+      <View style={[styles.centerContainer, { backgroundColor: theme.background }]}>
         <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
@@ -225,31 +230,46 @@ export default function SocialScreen() {
   });
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Messages</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>Messages</Text>
       </View>
 
       {/* Search Bar */}
       <TouchableOpacity
-        style={styles.searchContainer}
+        style={[styles.searchContainer, { backgroundColor: theme.surface }]}
         onPress={handleSearchPress}
       >
         <Search size={20} color={theme.placeholder} />
-        <Text style={styles.searchPlaceholder}>
+        <Text style={[styles.searchPlaceholder, { color: theme.placeholder }]}>
           Search users...
         </Text>
       </TouchableOpacity>
 
       {/* Status Updates */}
       {statuses.length > 0 && (
-        <View style={styles.statusSection}>
+        <View style={[styles.statusSection, { borderBottomColor: theme.border }]}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.statusList}
           >
+            {/* My Status */}
+            <TouchableOpacity
+              style={styles.statusItem}
+              onPress={() => router.push('/create-status')}
+            >
+              <View style={[styles.statusRing, styles.statusRingViewed]}>
+                <View style={styles.myStatusAvatar}>
+                  <Camera size={20} color={theme.primary} />
+                </View>
+              </View>
+              <Text style={[styles.statusName, { color: theme.text }]} numberOfLines={1}>
+                Your Story
+              </Text>
+            </TouchableOpacity>
+
             <FlatList
               data={statuses}
               renderItem={renderStatusItem}
@@ -278,8 +298,8 @@ export default function SocialScreen() {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <MessageCircle size={64} color={theme.border} />
-            <Text style={styles.emptyTitle}>No chats yet</Text>
-            <Text style={styles.emptyText}>
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>No chats yet</Text>
+            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
               Tap the + button to start a conversation
             </Text>
           </View>
@@ -288,6 +308,7 @@ export default function SocialScreen() {
 
       {/* Floating Action Buttons */}
       <View style={styles.fabContainer}>
+        {/* Backdrop */}
         {fabOpen && (
           <TouchableOpacity
             style={styles.fabBackdrop}
@@ -307,12 +328,12 @@ export default function SocialScreen() {
           ]}
         >
           <TouchableOpacity
-            style={[styles.fabButton, styles.fabOptionButton]}
+            style={[styles.fabButton, styles.fabOptionButton, { backgroundColor: theme.primary }]}
             onPress={() => handleFabAction('status')}
           >
             <ImageIcon size={24} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.fabLabel}>Status</Text>
+          <Text style={[styles.fabLabel, { color: theme.text, backgroundColor: theme.surface }]}>Status</Text>
         </Animated.View>
 
         <Animated.View
@@ -325,12 +346,12 @@ export default function SocialScreen() {
           ]}
         >
           <TouchableOpacity
-            style={[styles.fabButton, styles.fabOptionButton]}
+            style={[styles.fabButton, styles.fabOptionButton, { backgroundColor: theme.primary }]}
             onPress={() => handleFabAction('group')}
           >
             <Users size={24} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.fabLabel}>Group</Text>
+          <Text style={[styles.fabLabel, { color: theme.text, backgroundColor: theme.surface }]}>Group</Text>
         </Animated.View>
 
         <Animated.View
@@ -343,18 +364,18 @@ export default function SocialScreen() {
           ]}
         >
           <TouchableOpacity
-            style={[styles.fabButton, styles.fabOptionButton]}
+            style={[styles.fabButton, styles.fabOptionButton, { backgroundColor: theme.primary }]}
             onPress={() => handleFabAction('chat')}
           >
             <MessageCircle size={24} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.fabLabel}>Chat</Text>
+          <Text style={[styles.fabLabel, { color: theme.text, backgroundColor: theme.surface }]}>Chat</Text>
         </Animated.View>
 
         {/* Main FAB */}
         <Animated.View style={{ transform: [{ rotate: fabRotate }] }}>
           <TouchableOpacity
-            style={[styles.fabButton, styles.fabMain]}
+            style={[styles.fabButton, styles.fabMain, { backgroundColor: theme.primary }]}
             onPress={toggleFab}
           >
             <Plus size={28} color="#fff" />
@@ -368,13 +389,11 @@ export default function SocialScreen() {
 const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.background,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.background,
   },
   header: {
     flexDirection: 'row',
@@ -386,7 +405,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: theme.text,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -397,16 +415,13 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     height: 48,
     borderRadius: 24,
     gap: 12,
-    backgroundColor: theme.surface,
   },
   searchPlaceholder: {
     fontSize: 16,
-    color: theme.placeholder,
   },
   statusSection: {
     marginBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: theme.border,
     paddingBottom: 16,
   },
   statusList: {
@@ -439,10 +454,17 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     borderWidth: 3,
     borderColor: theme.background,
   },
+  myStatusAvatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 32,
+    backgroundColor: theme.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   statusName: {
     fontSize: 12,
     textAlign: 'center',
-    color: theme.text,
   },
   chatList: {
     paddingBottom: 100,
@@ -472,7 +494,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: theme.background,
-    backgroundColor: theme.primary,
   },
   chatInfo: {
     flex: 1,
@@ -488,11 +509,9 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     flex: 1,
-    color: theme.text,
   },
   chatTime: {
     fontSize: 12,
-    color: theme.textSecondary,
   },
   chatMessage: {
     flexDirection: 'row',
@@ -502,7 +521,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   lastMessage: {
     fontSize: 14,
     flex: 1,
-    color: theme.textSecondary,
   },
   unreadBadge: {
     minWidth: 20,
@@ -511,7 +529,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 6,
-    backgroundColor: theme.primary,
   },
   unreadText: {
     fontSize: 11,
@@ -530,12 +547,10 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     fontWeight: '700',
     marginTop: 16,
     marginBottom: 8,
-    color: theme.text,
   },
   emptyText: {
     fontSize: 14,
     textAlign: 'center',
-    color: theme.textSecondary,
   },
   fabContainer: {
     position: 'absolute',
@@ -560,12 +575,14 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   fabLabel: {
     fontSize: 14,
     fontWeight: '600',
-    backgroundColor: theme.surface,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    color: theme.text,
-    ...theme.shadow,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
   fabButton: {
     width: 56,
@@ -578,7 +595,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
-    backgroundColor: theme.primary,
   },
   fabOptionButton: {
     width: 48,

@@ -1,4 +1,4 @@
-// app/(tabs)/library-screen.tsx - Updated with theme support
+// app/(tabs)/library-screen.tsx - Enhanced with Book Recommendations
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -17,7 +17,8 @@ import { BookOpen, Search, Star, TrendingUp, Filter, Plus } from 'lucide-react-n
 import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTheme } from '@/contexts/ThemeContexts';
+import EnhancedBookCard from '@/components/EnhancedBookCard';
+import BookRecommendationModal from '@/app/BookRecommendationModal';
 
 interface Novel {
   id: string;
@@ -39,7 +40,6 @@ interface Novel {
 export default function LibraryScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { theme, isDark } = useTheme();
   const [books, setBooks] = useState<Novel[]>([]);
   const [filteredBooks, setFilteredBooks] = useState<Novel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,10 +47,13 @@ export default function LibraryScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [sortBy, setSortBy] = useState<'recent' | 'progress' | 'title'>('recent');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  
+  // Recommendation modal state
+  const [showRecommendModal, setShowRecommendModal] = useState(false);
+  const [selectedBook, setSelectedBook] = useState<Novel | null>(null);
 
   const categories = ['All', 'Romance', 'Mystery', 'Fantasy', 'Sci-Fi', 'Thriller'];
-
-  const styles = getStyles(theme, isDark);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -157,14 +160,29 @@ export default function LibraryScreen() {
     } as any);
   };
 
+  const handleBookLongPress = (book: Novel) => {
+    setSelectedBook(book);
+    setShowRecommendModal(true);
+  };
+
   const handleBrowseAllBooks = () => {
     router.push('/search-books' as any);
   };
+
+  const renderGridItem = ({ item }: { item: Novel }) => (
+    <EnhancedBookCard
+      book={item}
+      onPress={() => handleBookPress(item.id)}
+      onLongPress={() => handleBookLongPress(item)}
+    />
+  );
 
   const renderListItem = ({ item }: { item: Novel }) => (
     <TouchableOpacity
       style={styles.listItem}
       onPress={() => handleBookPress(item.id)}
+      onLongPress={() => handleBookLongPress(item)}
+      delayLongPress={500}
     >
       <Image 
         source={{ uri: item.cover_image_url }} 
@@ -214,7 +232,7 @@ export default function LibraryScreen() {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={theme.primary} />
+        <ActivityIndicator size="large" color="#007AFF" />
       </View>
     );
   }
@@ -228,11 +246,10 @@ export default function LibraryScreen() {
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
-        <Search size={20} color={theme.placeholder} style={styles.searchIcon} />
+        <Search size={20} color="#666" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search your library..."
-          placeholderTextColor={theme.placeholder}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
@@ -271,7 +288,7 @@ export default function LibraryScreen() {
           style={[styles.sortButton, sortBy === 'recent' && styles.sortButtonActive]}
           onPress={() => setSortBy('recent')}
         >
-          <TrendingUp size={16} color={sortBy === 'recent' ? '#fff' : theme.textSecondary} />
+          <TrendingUp size={16} color={sortBy === 'recent' ? '#007AFF' : '#666'} />
           <Text style={[styles.sortText, sortBy === 'recent' && styles.sortTextActive]}>
             Recent
           </Text>
@@ -280,7 +297,7 @@ export default function LibraryScreen() {
           style={[styles.sortButton, sortBy === 'progress' && styles.sortButtonActive]}
           onPress={() => setSortBy('progress')}
         >
-          <Star size={16} color={sortBy === 'progress' ? '#fff' : theme.textSecondary} />
+          <Star size={16} color={sortBy === 'progress' ? '#007AFF' : '#666'} />
           <Text style={[styles.sortText, sortBy === 'progress' && styles.sortTextActive]}>
             Progress
           </Text>
@@ -289,65 +306,132 @@ export default function LibraryScreen() {
           style={[styles.sortButton, sortBy === 'title' && styles.sortButtonActive]}
           onPress={() => setSortBy('title')}
         >
-          <Filter size={16} color={sortBy === 'title' ? '#fff' : theme.textSecondary} />
+          <Filter size={16} color={sortBy === 'title' ? '#007AFF' : '#666'} />
           <Text style={[styles.sortText, sortBy === 'title' && styles.sortTextActive]}>
             Title
           </Text>
         </TouchableOpacity>
+        
+        {/* View Mode Toggle */}
+        <View style={styles.viewToggle}>
+          <TouchableOpacity
+            style={[styles.viewButton, viewMode === 'grid' && styles.viewButtonActive]}
+            onPress={() => setViewMode('grid')}
+          >
+            <Text style={[styles.viewText, viewMode === 'grid' && styles.viewTextActive]}>Grid</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.viewButton, viewMode === 'list' && styles.viewButtonActive]}
+            onPress={() => setViewMode('list')}
+          >
+            <Text style={[styles.viewText, viewMode === 'list' && styles.viewTextActive]}>List</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Books List */}
-      <FlatList
-        data={filteredBooks}
-        renderItem={renderListItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContentContainer}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={theme.primary}
-            colors={[theme.primary]}
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <BookOpen size={64} color={theme.border} />
-            <Text style={styles.emptyTitle}>
-              {searchQuery ? 'No books found' : 'Your library is empty'}
-            </Text>
-            <Text style={styles.emptyText}>
-              {searchQuery
-                ? 'Try a different search term'
-                : 'Browse and add books to start reading'}
-            </Text>
-            {!searchQuery && (
-              <TouchableOpacity 
-                style={styles.browseButton}
-                onPress={handleBrowseAllBooks}
-              >
-                <Plus size={20} color="#fff" />
-                <Text style={styles.browseButtonText}>Browse Books</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        }
+      {/* Books Display */}
+      {viewMode === 'grid' ? (
+        <FlatList
+          data={filteredBooks}
+          renderItem={renderGridItem}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.gridRow}
+          contentContainerStyle={styles.gridContainer}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#007AFF"
+              colors={['#007AFF']}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <BookOpen size={64} color="#ccc" />
+              <Text style={styles.emptyTitle}>
+                {searchQuery ? 'No books found' : 'Your library is empty'}
+              </Text>
+              <Text style={styles.emptyText}>
+                {searchQuery
+                  ? 'Try a different search term'
+                  : 'Browse and add books to start reading'}
+              </Text>
+              {!searchQuery && (
+                <TouchableOpacity 
+                  style={styles.browseButton}
+                  onPress={handleBrowseAllBooks}
+                >
+                  <Plus size={20} color="#fff" />
+                  <Text style={styles.browseButtonText}>Browse Books</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          }
+        />
+      ) : (
+        <FlatList
+          data={filteredBooks}
+          renderItem={renderListItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContentContainer}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#007AFF"
+              colors={['#007AFF']}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <BookOpen size={64} color="#ccc" />
+              <Text style={styles.emptyTitle}>
+                {searchQuery ? 'No books found' : 'Your library is empty'}
+              </Text>
+              <Text style={styles.emptyText}>
+                {searchQuery
+                  ? 'Try a different search term'
+                  : 'Browse and add books to start reading'}
+              </Text>
+              {!searchQuery && (
+                <TouchableOpacity 
+                  style={styles.browseButton}
+                  onPress={handleBrowseAllBooks}
+                >
+                  <Plus size={20} color="#fff" />
+                  <Text style={styles.browseButtonText}>Browse Books</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          }
+        />
+      )}
+
+      {/* Book Recommendation Modal */}
+      <BookRecommendationModal
+        visible={showRecommendModal}
+        book={selectedBook}
+        onClose={() => {
+          setShowRecommendModal(false);
+          setSelectedBook(null);
+        }}
       />
     </SafeAreaView>
   );
 }
 
-const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.background,
+    backgroundColor: '#fff',
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.background,
   },
   header: {
     paddingHorizontal: 20,
@@ -356,11 +440,11 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: theme.text,
+    color: '#1a1a1a',
   },
   headerSubtitle: {
     fontSize: 14,
-    color: theme.textSecondary,
+    color: '#666',
     marginTop: 4,
   },
   searchContainer: {
@@ -370,7 +454,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 16,
     height: 48,
-    backgroundColor: theme.surface,
+    backgroundColor: '#f5f5f5',
     borderRadius: 24,
   },
   searchIcon: {
@@ -379,28 +463,27 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: theme.text,
+    color: '#1a1a1a',
   },
   categoryScroll: {
     paddingHorizontal: 20,
-    paddingBottom: 23,
+    paddingBottom: 16,
     gap: 8,
-    height: 60,
   },
   categoryChip: {
     paddingHorizontal: 20,
     paddingVertical: 8,
-    backgroundColor: theme.surface,
+    backgroundColor: '#f0f0f0',
     borderRadius: 20,
     marginRight: 8,
   },
   categoryChipActive: {
-    backgroundColor: theme.primary,
+    backgroundColor: '#007AFF',
   },
   categoryText: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.textSecondary,
+    color: '#666',
   },
   categoryTextActive: {
     color: '#fff',
@@ -410,26 +493,58 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
     gap: 8,
+    alignItems: 'center',
   },
   sortButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: theme.surface,
+    backgroundColor: '#f5f5f5',
     borderRadius: 16,
     gap: 6,
   },
   sortButtonActive: {
-    backgroundColor: theme.primary,
+    backgroundColor: '#E3F2FD',
   },
   sortText: {
     fontSize: 13,
     fontWeight: '600',
-    color: theme.textSecondary,
+    color: '#666',
   },
   sortTextActive: {
+    color: '#007AFF',
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    marginLeft: 'auto',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 16,
+    padding: 2,
+  },
+  viewButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  viewButtonActive: {
+    backgroundColor: '#007AFF',
+  },
+  viewText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+  },
+  viewTextActive: {
     color: '#fff',
+  },
+  gridContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 100,
+  },
+  gridRow: {
+    justifyContent: 'space-between',
+    marginBottom: 16,
   },
   listContentContainer: {
     paddingHorizontal: 20,
@@ -437,7 +552,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   },
   listItem: {
     flexDirection: 'row',
-    backgroundColor: theme.surface,
+    backgroundColor: '#f9f9f9',
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
@@ -454,20 +569,19 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   listTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: theme.text,
+    color: '#1a1a1a',
     marginBottom: 4,
   },
   listAuthor: {
     fontSize: 13,
-    color: theme.textSecondary,
+    color: '#666',
     marginBottom: 6,
   },
   listDescription: {
     fontSize: 12,
-    color: theme.textSecondary,
+    color: '#888',
     lineHeight: 18,
     marginBottom: 8,
-    opacity: 0.8,
   },
   listFooter: {
     flexDirection: 'row',
@@ -483,10 +597,10 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   listRatingText: {
     fontSize: 12,
     fontWeight: '600',
-    color: theme.text,
+    color: '#1a1a1a',
   },
   listCategory: {
-    backgroundColor: theme.primary + '20',
+    backgroundColor: '#E3F2FD',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -494,23 +608,23 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   listCategoryText: {
     fontSize: 11,
     fontWeight: '600',
-    color: theme.primary,
+    color: '#007AFF',
   },
   listProgressBar: {
     height: 4,
-    backgroundColor: theme.border,
+    backgroundColor: '#e0e0e0',
     borderRadius: 2,
     overflow: 'hidden',
     marginBottom: 4,
   },
   listProgressFill: {
     height: '100%',
-    backgroundColor: theme.primary,
+    backgroundColor: '#007AFF',
     borderRadius: 2,
   },
   progressLabel: {
     fontSize: 11,
-    color: theme.textSecondary,
+    color: '#666',
   },
   emptyContainer: {
     flex: 1,
@@ -521,13 +635,13 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: theme.text,
+    color: '#1a1a1a',
     marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
-    color: theme.textSecondary,
+    color: '#666',
     textAlign: 'center',
     marginBottom: 24,
   },
@@ -535,7 +649,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: theme.primary,
+    backgroundColor: '#007AFF',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 24,
