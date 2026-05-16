@@ -1,900 +1,548 @@
-// app/(tabs)/index.tsx - Enhanced with Book Recommendations
-import React, { useEffect, useState } from 'react';
+// app/(tabs)/index.tsx
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  Image,
-  RefreshControl,
-  ScrollView,
+  View, Text, StyleSheet, RefreshControl, ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { BookOpen, TrendingUp, Star, Search } from 'lucide-react-native';
-import EnhancedBookCard from '@/components/EnhancedBookCard';
+import { useTheme } from '@/contexts/ThemeContexts';
+import { BookOpen } from 'lucide-react-native';
 import BookRecommendationModal from '@/app/BookRecommendationModal';
 
-interface Novel {
-  id: string;
-  title: string;
-  author: string;
-  description: string;
-  category: string;
-  cover_image_url: string;
-  rating: number;
-  total_ratings: number;
-  views: number;
-  reading_progress?: {
-    progress_percentage: number;
-    current_page: number;
-  };
+import {
+  Novel, UserProfile, Advertisement, CategorySection,
+} from '@/types/home';
+import HeaderSection from '@/components/home/HeaderSection';
+import AdCarousel from '@/components/home/AdCarousel';
+import ContinueReadingSection from '@/components/home/ContinueReadingSection';
+import BookSection from '@/components/home/BookSection';
+import SearchModalView from '@/components/home/SearchModalView';
+import {
+  CarouselSkeleton, ContinueReadingSkeleton, BookSectionSkeleton,
+} from '@/components/home/Skeletons';
+
+// Major genres shown as sections — order determines render order
+const MAJOR_GENRES = [
+  'Romance', 'Mystery', 'Fantasy', 'Sci-Fi', 'Thriller', 'Horror', 'Adventure',
+];
+
+const SECTION_LIMIT = 10;
+
+// ---------------------------------------------------------------------------
+// Personalised section heading copy — no emojis
+// ---------------------------------------------------------------------------
+function buildLabel(
+  category: string,
+  sectionType: CategorySection['sectionType'],
+): string {
+  if (sectionType === 'next_read') return 'Your Next Read';
+  if (sectionType === 'preferred') {
+    const map: Record<string, string> = {
+      Romance: 'Because You Love Romance',
+      Mystery: 'More Mysteries For You',
+      Fantasy: 'Fantasy Picks For You',
+      'Sci-Fi': 'Sci-Fi Picks For You',
+      Thriller: 'Thrillers For You',
+      Horror: 'Horror Picks For You',
+      Adventure: 'Adventure Picks For You',
+    };
+    return map[category] ?? `More ${category} For You`;
+  }
+  return category;
 }
 
-interface UserProfile {
-  username?: string;
-  avatar_url?: string | null;
-}
-
+// ---------------------------------------------------------------------------
+// HomeScreen
+// ---------------------------------------------------------------------------
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [continueReading, setContinueReading] = useState<Novel[]>([]);
-  const [lastReadBooks, setLastReadBooks] = useState<Novel[]>([]);
-  const [featuredBooks, setFeaturedBooks] = useState<Novel[]>([]);
-  const [popularBooks, setPopularBooks] = useState<Novel[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [loading, setLoading] = useState(true);
+  const { theme, isDark } = useTheme();
+
+  // Granular loading flags — each section shows its skeleton independently
+  const [adsLoading, setAdsLoading] = useState(true);
+  const [continueLoading, setContinueLoading] = useState(true);
+  const [sectionsLoading, setSectionsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [readingGoal, setReadingGoal] = useState({ current: 0, total: 10 });
-  
-  // Recommendation modal state
+
+  // Data
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [ads, setAds] = useState<Advertisement[]>([]);
+  const [continueReading, setContinueReading] = useState<Novel[]>([]);
+  // novels grouped by category — Map<category, Novel[]>
+  const [novelsByCategory, setNovelsByCategory] = useState<Map<string, Novel[]>>(new Map());
+
+  // UI
+  const [showSearchModal, setShowSearchModal] = useState(false);
   const [showRecommendModal, setShowRecommendModal] = useState(false);
   const [selectedBook, setSelectedBook] = useState<Novel | null>(null);
 
-  const categories = ['All', 'Romance', 'Mystery', 'Fantasy', 'Sci-Fi', 'Thriller'];
+  const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // ---------------------------------------------------------------------------
+  // Derived: ordered list of sections
+  // First section = "Your Next Read" from the top preferred genre.
+  // Then remaining preferred genres labelled "Because You Love X".
+  // Then all other major genres in MAJOR_GENRES order.
+  // ---------------------------------------------------------------------------
+  const categorySections = useMemo((): CategorySection[] => {
+    if (novelsByCategory.size === 0) return [];
 
-  useEffect(() => {
-    if (selectedCategory !== 'All') {
-      loadBooksByCategory(selectedCategory);
-    } else {
-      loadFeaturedBooks();
+    const preferred: string[] = profile?.preferred_categories ?? [];
+    const sections: CategorySection[] = [];
+    const covered = new Set<string>();
+
+    // 1. "Your Next Read" — books from the user's top preferred genre
+    if (preferred.length > 0) {
+      const topCat = preferred[0];
+      const books = novelsByCategory.get(topCat) ?? [];
+      if (books.length > 0) {
+        covered.add(topCat);
+        sections.push({
+          category: topCat,
+          books: books.slice(0, SECTION_LIMIT),
+          sectionType: 'next_read',
+          label: buildLabel(topCat, 'next_read'),
+        });
+      }
     }
-  }, [selectedCategory]);
 
-  const loadData = async () => {
+    // 2. Remaining preferred genres
+    for (const cat of preferred.slice(1)) {
+      const books = novelsByCategory.get(cat) ?? [];
+      if (books.length > 0 && !covered.has(cat)) {
+        covered.add(cat);
+        sections.push({
+          category: cat,
+          books: books.slice(0, SECTION_LIMIT),
+          sectionType: 'preferred',
+          label: buildLabel(cat, 'preferred'),
+        });
+      }
+    }
+
+    // 3. Remaining major genres in MAJOR_GENRES order
+    for (const cat of MAJOR_GENRES) {
+      if (covered.has(cat)) continue;
+      const books = novelsByCategory.get(cat) ?? [];
+      if (books.length > 0) {
+        sections.push({
+          category: cat,
+          books: books.slice(0, SECTION_LIMIT),
+          sectionType: 'category',
+          label: buildLabel(cat, 'category'),
+        });
+      }
+    }
+
+    return sections;
+  }, [novelsByCategory, profile?.preferred_categories]);
+
+  // ---------------------------------------------------------------------------
+  // Kick off all fetches in parallel — starts loading during splash
+  // ---------------------------------------------------------------------------
+  const fetchAll = useCallback(() => {
     if (!user) return;
+    loadProfile();
+    loadAds();
+    loadContinueReading();
+    loadNovels();
+  }, [user]);
 
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  // ---------------------------------------------------------------------------
+  // Profile
+  // ---------------------------------------------------------------------------
+  const loadProfile = async () => {
+    if (!user) return;
     try {
-      // Load user profile
-      try {
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('username, avatar_url')
-          .eq('id', user.id)
-          .maybeSingle();
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('username, avatar_url, preferred_categories')
+        .eq('id', user.id)
+        .maybeSingle();
 
-        if (profileError && profileError.code !== 'PGRST116') {
-          console.log('Error loading profile:', profileError.message);
-        }
-
-        if (profileData) {
-          setProfile(profileData);
-        } else {
-          const username = user.email?.split('@')[0] || 'user';
-          const { data: newProfile, error: createError } = await supabase
-            .from('profiles')
-            .insert({
-              id: user.id,
-              username: username,
-              email: user.email || '',
-              avatar_url: null,
-            })
-            .select('username, avatar_url')
-            .single();
-
-          if (createError) {
-            console.log('Could not create profile:', createError.message);
-          } else if (newProfile) {
-            setProfile(newProfile);
-          }
-        }
-      } catch (profileError) {
-        console.log('Could not load profile, using email as fallback');
+      if (error && error.code !== 'PGRST116') {
+        console.warn('[Home] profile:', error.message);
       }
 
-      await loadContinueReading();
-      await loadLastReadBooks();
-      await loadFeaturedBooks();
-      await loadPopularBooks();
-      await calculateReadingGoal();
-
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setLoading(false);
+      if (data) {
+        setProfile(data);
+      } else {
+        const username = user.email?.split('@')[0] ?? 'reader';
+        const { data: created } = await supabase
+          .from('profiles')
+          .insert({ id: user.id, username, email: user.email ?? '', avatar_url: null })
+          .select('username, avatar_url, preferred_categories')
+          .single();
+        if (created) setProfile(created);
+      }
+    } catch (e) {
+      console.warn('[Home] loadProfile:', e);
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // Advertisements
+  // ---------------------------------------------------------------------------
+  const loadAds = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('advertisements')
+        .select('id, image_url, title, subtitle, link_type, link_value, sort_order')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true })
+        .limit(6);
+
+      if (error) console.warn('[Home] ads:', error.message);
+      setAds((data as Advertisement[]) ?? []);
+    } catch (e) {
+      console.warn('[Home] loadAds:', e);
+    } finally {
+      setAdsLoading(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Continue reading
+  // Fix: query reading_progress joined to novels. Supabase requires the FK
+  // relationship name. If the FK hint doesn't resolve, we fall back to a
+  // two-step query using in() on the book_ids.
+  // ---------------------------------------------------------------------------
   const loadContinueReading = async () => {
     if (!user) return;
-
     try {
-      const { data: progressData } = await supabase
+      // Step 1: get in-progress book_ids for this user
+      const { data: progressRows, error: progressError } = await supabase
         .from('reading_progress')
-        .select(`
-          book_id,
-          progress_percentage,
-          current_page,
-          last_read,
-          novels:book_id (
-            id,
-            title,
-            author,
-            description,
-            category,
-            cover_image_url,
-            rating,
-            total_ratings,
-            views
-          )
-        `)
+        .select('book_id, progress_percentage, current_page, last_read')
         .eq('user_id', user.id)
         .gt('progress_percentage', 0)
         .lt('progress_percentage', 100)
         .order('last_read', { ascending: false })
-        .limit(3);
+        .limit(6);
 
-      if (progressData) {
-        const books = progressData
-          .filter(item => item.novels)
-          .map(item => ({
-            ...(item.novels as any),
-            reading_progress: {
-              progress_percentage: item.progress_percentage,
-              current_page: item.current_page,
-            },
-          }));
-        setContinueReading(books);
+      console.log('[CR] progressRows:', JSON.stringify(progressRows));
+      console.log('[CR] progressError:', progressError?.message);
+
+      if (progressError) {
+        console.warn('[Home] reading_progress:', progressError.message);
+        return;
       }
-    } catch (error) {
-      console.error('Error loading continue reading:', error);
-    }
-  };
 
-  const loadLastReadBooks = async () => {
-    if (!user) return;
-
-    try {
-      const { data: progressData } = await supabase
-        .from('reading_progress')
-        .select(`
-          book_id,
-          progress_percentage,
-          current_page,
-          last_read,
-          novels:book_id (
-            id,
-            title,
-            author,
-            cover_image_url
-          )
-        `)
-        .eq('user_id', user.id)
-        .order('last_read', { ascending: false })
-        .limit(3);
-
-      if (progressData) {
-        const books = progressData
-          .filter(item => item.novels)
-          .map(item => ({
-            ...(item.novels as any),
-            reading_progress: {
-              progress_percentage: item.progress_percentage,
-              current_page: item.current_page,
-            },
-          }));
-        setLastReadBooks(books);
+      if (!progressRows || progressRows.length === 0) {
+        console.log('[CR] No in-progress books found for user', user.id);
+        setContinueReading([]);
+        return;
       }
-    } catch (error) {
-      console.error('Error loading last read books:', error);
-    }
-  };
 
-  const loadFeaturedBooks = async () => {
-    try {
-      const { data, error } = await supabase
+      // Step 2: fetch the actual novel rows by id
+      const bookIds = progressRows.map(r => r.book_id);
+      console.log('[CR] fetching novels for ids:', bookIds);
+
+      const { data: novelsData, error: novelsError } = await supabase
         .from('novels')
         .select('id, title, author, description, category, cover_image_url, rating, total_ratings, views')
-        .eq('is_featured', true)
+        .in('id', bookIds)
+        .eq('is_public', true);
+
+      console.log('[CR] novelsData count:', novelsData?.length);
+      console.log('[CR] novelsError:', novelsError?.message);
+
+      if (novelsError) {
+        console.warn('[Home] novels for continue reading:', novelsError.message);
+        return;
+      }
+
+      // Merge progress into novel objects, preserving last_read order
+      const novelMap = new Map((novelsData ?? []).map((n: any) => [n.id, n]));
+      const merged = progressRows
+        .filter(r => novelMap.has(r.book_id))
+        .map(r => ({
+          ...novelMap.get(r.book_id)!,
+          reading_progress: {
+            progress_percentage: r.progress_percentage,
+            current_page: r.current_page,
+          },
+        })) as Novel[];
+
+      console.log('[CR] merged novels:', merged.length);
+      setContinueReading(merged);
+    } catch (e) {
+      console.warn('[Home] loadContinueReading:', e);
+    } finally {
+      setContinueLoading(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Novels grouped by major category + their tags for the book card pills
+  // ---------------------------------------------------------------------------
+  const loadNovels = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('novels_with_tags')
+        .select('id, title, author, description, category, cover_image_url, rating, total_ratings, views, tags')
         .eq('is_public', true)
         .order('views', { ascending: false })
-        .limit(10);
+        .limit(200);
 
-      if (error) throw error;
-      setFeaturedBooks(data || []);
-    } catch (error) {
-      console.error('Error loading featured books:', error);
+      console.log('[Novels] total fetched:', data?.length);
+      console.log('[Novels] error:', error?.message);
+
+      if (error) {
+        console.warn('[Home] novels_with_tags:', error.message);
+        // Fallback: try querying novels directly without the view
+        const { data: fallback, error: fallbackError } = await supabase
+          .from('novels')
+          .select('id, title, author, description, category, cover_image_url, rating, total_ratings, views')
+          .eq('is_public', true)
+          .order('views', { ascending: false })
+          .limit(200);
+
+        console.log('[Novels] fallback count:', fallback?.length);
+        console.log('[Novels] fallback error:', fallbackError?.message);
+
+        if (fallback && fallback.length > 0) {
+          const grouped = new Map<string, Novel[]>();
+          for (const novel of fallback as Novel[]) {
+            const cat = novel.category;
+            if (!cat) continue;
+            if (!grouped.has(cat)) grouped.set(cat, []);
+            grouped.get(cat)!.push(novel);
+          }
+          console.log('[Novels] fallback categories:', Array.from(grouped.keys()));
+          setNovelsByCategory(grouped);
+        }
+        return;
+      }
+
+      // Group by category
+      const grouped = new Map<string, Novel[]>();
+      for (const novel of (data as Novel[]) ?? []) {
+        const cat = novel.category;
+        if (!cat) continue;
+        if (!grouped.has(cat)) grouped.set(cat, []);
+        grouped.get(cat)!.push(novel);
+      }
+
+      console.log('[Novels] categories found:', Array.from(grouped.keys()));
+      console.log('[Novels] counts per category:', Array.from(grouped.entries()).map(([k, v]) => `${k}:${v.length}`));
+      setNovelsByCategory(grouped);
+    } catch (e) {
+      console.warn('[Home] loadNovels:', e);
+    } finally {
+      setSectionsLoading(false);
     }
   };
 
-  const loadPopularBooks = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('novels')
-        .select('id, title, author, description, category, cover_image_url, rating, total_ratings, views')
-        .eq('is_public', true)
-        .order('views', { ascending: false })
-        .limit(10);
+  // ---------------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------------
+  const handleBookPress = useCallback(async (bookId: string) => {
+    try { await supabase.rpc('increment_book_views', { book_id: bookId }); } catch { /* ok */ }
+    router.push({ pathname: '/book-details', params: { bookId } } as any);
+  }, [router]);
 
-      if (error) throw error;
-      setPopularBooks(data || []);
-    } catch (error) {
-      console.error('Error loading popular books:', error);
-    }
-  };
-
-  const loadBooksByCategory = async (category: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('novels')
-        .select('id, title, author, description, category, cover_image_url, rating, total_ratings, views')
-        .eq('category', category)
-        .eq('is_public', true)
-        .order('rating', { ascending: false })
-        .limit(10);
-
-      if (error) throw error;
-      setFeaturedBooks(data || []);
-    } catch (error) {
-      console.error('Error loading books by category:', error);
-    }
-  };
-
-  const calculateReadingGoal = async () => {
-    if (!user) return;
-
-    try {
-      const { count } = await supabase
-        .from('reading_progress')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .gte('progress_percentage', 100);
-
-      setReadingGoal({ current: count || 0, total: 10 });
-    } catch (error) {
-      console.error('Error calculating reading goal:', error);
-    }
-  };
-
-  const handleBookPress = async (bookId: string) => {
-    try {
-      await supabase.rpc('increment_book_views', { book_id: bookId });
-    } catch (error) {
-      console.error('Error incrementing views:', error);
-    }
-
-    router.push({
-      pathname: '/book-details',
-      params: { bookId: bookId }
-    } as any);
-  };
-
-  const handleBookLongPress = (book: Novel) => {
+  const handleBookLongPress = useCallback((book: Novel) => {
     setSelectedBook(book);
     setShowRecommendModal(true);
-  };
+  }, []);
 
-  const onRefresh = async () => {
+  const handleAdPress = useCallback((ad: Advertisement) => {
+    if (ad.link_type === 'book') {
+      handleBookPress(ad.link_value);
+    } else {
+      router.push({
+        pathname: '/(tabs)/library-screen',
+        params: { category: ad.link_value },
+      } as any);
+    }
+  }, [handleBookPress, router]);
+
+  const handleSeeAll = useCallback((category: string) => {
+    router.push({
+      pathname: '/(tabs)/library-screen',
+      params: { category },
+    } as any);
+  }, [router]);
+
+  const handleCloseRecommendModal = useCallback(() => {
+    setShowRecommendModal(false);
+    setSelectedBook(null);
+  }, []);
+
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  };
+    setAdsLoading(true);
+    setContinueLoading(true);
+    setSectionsLoading(true);
+    fetchAll();
+    // let granular flags resolve themselves
+    setTimeout(() => setRefreshing(false), 1500);
+  }, [fetchAll]);
 
-  const renderEnhancedBookCard = ({ item }: { item: Novel }) => (
-    <EnhancedBookCard
-      book={item}
-      onPress={() => handleBookPress(item.id)}
-      onLongPress={() => handleBookLongPress(item)}
+  const handleOpenSearch = useCallback(() => setShowSearchModal(true), []);
+  const handleCloseSearch = useCallback(() => setShowSearchModal(false), []);
+  const handleProfilePress = useCallback(() => router.push('/(tabs)/profile-screen'), [router]);
+
+  // ---------------------------------------------------------------------------
+  // Derived
+  // ---------------------------------------------------------------------------
+  const username = useMemo(
+    () => profile?.username ?? user?.email?.split('@')[0] ?? 'Reader',
+    [profile?.username, user?.email],
+  );
+
+  const refreshControl = useMemo(() => (
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      tintColor={theme.primary}
+      colors={[theme.primary]}
     />
-  );
+  ), [refreshing, onRefresh, theme.primary]);
 
-  const renderContinueReadingCard = ({ item }: { item: Novel }) => (
-    <TouchableOpacity
-      style={styles.continueCard}
-      onPress={() => handleBookPress(item.id)}
-      onLongPress={() => handleBookLongPress(item)}
-      delayLongPress={500}
-    >
-      <Image 
-        source={{ uri: item.cover_image_url }} 
-        style={styles.continueCover}
-        defaultSource={require('@/assets/images/book-placeholder.png')}
-      />
-      <View style={styles.continueInfo}>
-        <Text style={styles.continueTitle} numberOfLines={2}>
-          {item.title}
-        </Text>
-        <Text style={styles.continueAuthor} numberOfLines={1}>
-          {item.author}
-        </Text>
-        {item.reading_progress && (
-          <>
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${item.reading_progress.progress_percentage}%` },
-                ]}
-              />
-            </View>
-            <Text style={styles.progressText}>
-              {Math.round(item.reading_progress.progress_percentage)}% complete
-            </Text>
-          </>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
+  const modalStyles = useMemo(() => getModalStyles(theme), [theme]);
 
-  const renderLastReadBook = ({ item }: { item: Novel }) => (
-    <TouchableOpacity
-      style={styles.lastReadBook}
-      onPress={() => handleBookPress(item.id)}
-      onLongPress={() => handleBookLongPress(item)}
-      delayLongPress={500}
-    >
-      <Image 
-        source={{ uri: item.cover_image_url }} 
-        style={styles.lastReadCover}
-        defaultSource={require('@/assets/images/book-placeholder.png')}
-      />
-      <View style={styles.lastReadOverlay}>
-        <Text style={styles.lastReadProgress}>
-          {Math.round(item.reading_progress?.progress_percentage || 0)}%
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-
-  if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
-    );
-  }
-
-  const username = profile?.username || user?.email?.split('@')[0] || 'Reader';
-  const progressPercentage = (readingGoal.current / readingGoal.total) * 100;
-
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={[styles.root, { backgroundColor: theme.background }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#007AFF"
-            colors={['#007AFF']}
-          />
-        }
+        refreshControl={refreshControl}
+        contentInsetAdjustmentBehavior="never"
       >
-        {/* Header Section with Search */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.greeting}>Hello {username}!</Text>
-            <Text style={styles.subGreeting}>Let's start reading</Text>
-          </View>
-          <View style={styles.headerRight}>
-            <TouchableOpacity 
-              style={styles.searchButton}
-              onPress={() => router.push('/search-books' as any)}
-            >
-              <Search size={24} color="#007AFF" />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.profileButton}
-              onPress={() => router.push('/(tabs)/profile-screen')}
-            >
-              {profile?.avatar_url ? (
-                <Image 
-                  source={{ uri: profile.avatar_url }} 
-                  style={styles.profilePic} 
-                />
-              ) : (
-                <View style={styles.profilePicPlaceholder}>
-                  <Text style={styles.profileInitial}>
-                    {username.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
+        {/* Header — immediate, no loading state needed */}
+        <HeaderSection
+          username={username}
+          profile={profile}
+          onSearchPress={handleOpenSearch}
+          onProfilePress={handleProfilePress}
+          theme={theme}
+        />
 
-        {/* Reading Goal Card with Last Read Books */}
-        <View style={styles.goalCard}>
-          <View style={styles.goalHeader}>
-            <Text style={styles.goalTitle}>Your Goal</Text>
-            <TouchableOpacity>
-              <Text style={styles.goalEdit}>Edit</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.goalProgress}>
-            <View style={styles.goalStats}>
-              <Text style={styles.goalCount}>
-                {readingGoal.current}/{readingGoal.total}
-              </Text>
-              <Text style={styles.goalLabel}>Books</Text>
-            </View>
-            <View style={styles.goalBarContainer}>
-              <View style={styles.goalBar}>
-                <View
-                  style={[
-                    styles.goalBarFill,
-                    { width: `${Math.min(progressPercentage, 100)}%` },
-                  ]}
-                />
-              </View>
-              <Text style={styles.goalPercentage}>
-                {Math.round(progressPercentage)}%
-              </Text>
-            </View>
-          </View>
+        {/* Ad carousel */}
+        {adsLoading ? (
+          <CarouselSkeleton theme={theme} />
+        ) : ads.length > 0 ? (
+          <AdCarousel ads={ads} onPress={handleAdPress} theme={theme} />
+        ) : null}
 
-          {lastReadBooks.length > 0 && (
-            <View style={styles.lastReadSection}>
-              <Text style={styles.lastReadTitle}>Continue from where you left off</Text>
-              <FlatList
-                data={lastReadBooks}
-                renderItem={renderLastReadBook}
-                keyExtractor={(item) => item.id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.lastReadList}
-              />
-            </View>
-          )}
-        </View>
-
-        {/* Continue Reading Section */}
-        {continueReading.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Continue Reading</Text>
-            </View>
-            <FlatList
-              data={continueReading}
-              renderItem={renderContinueReadingCard}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              contentContainerStyle={styles.continueList}
-            />
-          </View>
+        {/* Continue reading */}
+        {continueLoading ? (
+          <ContinueReadingSkeleton theme={theme} />
+        ) : (
+          <ContinueReadingSection
+            books={continueReading}
+            onBookPress={handleBookPress}
+            onBookLongPress={handleBookLongPress}
+            theme={theme}
+          />
         )}
 
-        {/* Categories Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle1}>Categories</Text>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryContainer}
-          >
-            {categories.map((category) => (
-              <TouchableOpacity
-                key={category}
-                style={[
-                  styles.categoryChip,
-                  category === selectedCategory && styles.categoryChipActive,
-                ]}
-                onPress={() => setSelectedCategory(category)}
-              >
-                <Text
-                  style={[
-                    styles.categoryText,
-                    category === selectedCategory && styles.categoryTextActive,
-                  ]}
-                >
-                  {category}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Featured/Category Books Section - Using Enhanced Cards */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>
-              {selectedCategory === 'All' ? 'Featured Books' : selectedCategory}
+        {/* Major-genre sections — personalised order */}
+        {sectionsLoading ? (
+          <>
+            <BookSectionSkeleton theme={theme} />
+            <BookSectionSkeleton theme={theme} />
+            <BookSectionSkeleton theme={theme} />
+          </>
+        ) : categorySections.length === 0 ? (
+          <View style={styles.empty}>
+            <BookOpen size={52} color={theme.border} />
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>No books yet</Text>
+            <Text style={[styles.emptySub, { color: theme.textSecondary }]}>
+              Check back soon
             </Text>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/library-screen')}>
-              <Text style={styles.seeAll}>See All</Text>
-            </TouchableOpacity>
           </View>
-          
-          {featuredBooks.length === 0 ? (
-            <View style={styles.emptyPopular}>
-              <BookOpen size={48} color="#ddd" />
-              <Text style={styles.emptyText}>No books in this category yet</Text>
-            </View>
-          ) : (
-            <FlatList
-              data={featuredBooks}
-              renderItem={renderEnhancedBookCard}
-              keyExtractor={(item) => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.popularList}
+        ) : (
+          categorySections.map(section => (
+            <BookSection
+              key={section.category + '-' + section.sectionType}
+              label={section.label}
+              category={section.category}
+              books={section.books}
+              onBookPress={handleBookPress}
+              onBookLongPress={handleBookLongPress}
+              onSeeAll={handleSeeAll}
+              theme={theme}
             />
-          )}
-        </View>
-
-        {/* Popular Books Section - Using Enhanced Cards */}
-        {selectedCategory === 'All' && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Popular Books</Text>
-              <TouchableOpacity onPress={() => router.push('/(tabs)/library-screen')}>
-                <Text style={styles.seeAll}>See All</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <FlatList
-              data={popularBooks.slice(0, 5)}
-              renderItem={renderEnhancedBookCard}
-              keyExtractor={(item) => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.popularList}
-            />
-          </View>
+          ))
         )}
 
-        {/* Empty State */}
-        {continueReading.length === 0 && featuredBooks.length === 0 && (
-          <View style={styles.emptyState}>
-            <BookOpen size={64} color="#ddd" />
-            <Text style={styles.emptyTitle}>Discover Amazing Books</Text>
-            <Text style={styles.emptySubtitle}>
-              Browse our library to start your reading journey
-            </Text>
-            <TouchableOpacity
-              style={styles.addBookButton}
-              onPress={() => router.push('/search-books' as any)}
-            >
-              <Text style={styles.addBookButtonText}>Browse Books</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        <View style={styles.bottomPad} />
       </ScrollView>
 
-      {/* Book Recommendation Modal */}
+      <SearchModalView
+        visible={showSearchModal}
+        onClose={handleCloseSearch}
+        onBookPress={handleBookPress}
+        onBookLongPress={handleBookLongPress}
+        theme={theme}
+        styles={modalStyles}
+      />
+
       <BookRecommendationModal
         visible={showRecommendModal}
         book={selectedBook}
-        onClose={() => {
-          setShowRecommendModal(false);
-          setSelectedBook(null);
-        }}
+        onClose={handleCloseRecommendModal}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 20,
-  },
-  headerLeft: {
-    flex: 1,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  greeting: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    marginBottom: 4,
-  },
-  subGreeting: {
-    fontSize: 14,
-    color: '#666',
-  },
-  searchButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profileButton: {
-    marginLeft: 4,
-  },
-  profilePic: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-  profilePicPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profileInitial: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  goalCard: {
-    marginHorizontal: 20,
-    padding: 20,
-    backgroundColor: '#007AFF',
-    borderRadius: 16,
-    marginBottom: 24,
-  },
-  goalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  goalTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  goalEdit: {
-    fontSize: 14,
-    color: '#fff',
-    opacity: 0.8,
-  },
-  goalProgress: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  goalStats: {
-    marginRight: 16,
-  },
-  goalCount: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  goalLabel: {
-    fontSize: 12,
-    color: '#fff',
-    opacity: 0.8,
-  },
-  goalBarContainer: {
-    flex: 1,
-  },
-  goalBar: {
-    height: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 4,
-    marginBottom: 8,
-  },
-  goalBarFill: {
-    height: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 4,
-  },
-  goalPercentage: {
-    fontSize: 12,
-    color: '#fff',
-    textAlign: 'right',
-  },
-  lastReadSection: {
-    marginTop: 20,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  lastReadTitle: {
-    fontSize: 13,
-    color: '#fff',
-    opacity: 0.9,
-    marginBottom: 12,
-  },
-  lastReadList: {
-    gap: 12,
-  },
-  lastReadBook: {
-    position: 'relative',
-    width: 70,
-    height: 100,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  lastReadCover: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 8,
-  },
-  lastReadOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingVertical: 4,
-    alignItems: 'center',
-  },
-  lastReadProgress: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  section: {
-    marginBottom: 24,
-    paddingHorizontal: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sectionTitle1: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1a1a1a',
-  },
-  seeAll: {
-    fontSize: 14,
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  continueList: {
-    gap: 12,
-  },
-  continueCard: {
-    flexDirection: 'row',
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-  },
-  continueCover: {
-    width: 60,
-    height: 90,
-    borderRadius: 8,
-    marginRight: 12,
-  },
-  continueInfo: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  continueTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 4,
-  },
-  continueAuthor: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 8,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 2,
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#007AFF',
-    borderRadius: 2,
-  },
-  progressText: {
-    fontSize: 11,
-    color: '#666',
-  },
-  categoryContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingRight: 20,
-  },
-  categoryChip: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 20,
-  },
-  categoryChipActive: {
-    backgroundColor: '#007AFF',
-  },
-  categoryText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-  },
-  categoryTextActive: {
-    color: '#fff',
-  },
-  popularList: {
-    gap: 16,
-    paddingRight: 20,
-  },
-  emptyPopular: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#999',
-    marginTop: 12,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 40,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 24,
-    textAlign: 'center',
-  },
-  addBookButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 24,
-  },
-  addBookButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
+const getStyles = (theme: any, _isDark: boolean) =>
+  StyleSheet.create({
+    root: { flex: 1 },
+    empty: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 40 },
+    emptyTitle: { fontSize: 20, fontWeight: '700', marginTop: 16, marginBottom: 8 },
+    emptySub: { fontSize: 14, textAlign: 'center' },
+    bottomPad: { height: 40 },
+  });
+
+const getModalStyles = (theme: any) =>
+  StyleSheet.create({
+    searchModal: { flex: 1 },
+    searchModalHeader: {
+      flexDirection: 'row', justifyContent: 'space-between',
+      alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1,
+    },
+    searchModalTitle: { fontSize: 18, fontWeight: '700' },
+    searchModalInput: {
+      flexDirection: 'row', alignItems: 'center',
+      marginHorizontal: 20, marginVertical: 16, paddingHorizontal: 16,
+      height: 48, borderRadius: 24, gap: 12,
+    },
+    searchInput: { flex: 1, fontSize: 16 },
+    searchCategoryContainer: { paddingHorizontal: 20, paddingBottom: 16, gap: 8 },
+    searchCategoryChip: {
+      paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1,
+    },
+    searchCategoryText: { fontSize: 14, fontWeight: '600' },
+    searchLoading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    searchEmpty: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
+    searchEmptyTitle: { fontSize: 20, fontWeight: '700', marginTop: 16, marginBottom: 8 },
+    searchEmptyText: { fontSize: 14, textAlign: 'center' },
+    searchResultsList: { paddingHorizontal: 20, paddingBottom: 100 },
+    searchResultItem: {
+      flexDirection: 'row', backgroundColor: theme.surface,
+      borderRadius: 12, padding: 12, marginBottom: 12,
+    },
+    searchResultImage: { width: 80, height: 120, borderRadius: 8, marginRight: 12 },
+    searchResultInfo: { flex: 1 },
+    searchResultTitle: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
+    searchResultAuthor: { fontSize: 13, marginBottom: 6 },
+    searchResultDescription: { fontSize: 12, lineHeight: 18, marginBottom: 8 },
+    searchResultFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    searchResultRating: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    searchResultRatingText: { fontSize: 12, fontWeight: '600' },
+    searchResultCategory: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+    searchResultCategoryText: { fontSize: 11, fontWeight: '600' },
+  });

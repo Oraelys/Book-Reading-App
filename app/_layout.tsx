@@ -76,7 +76,7 @@ function RootLayoutNav() {
         <Stack.Screen name="user-profile" />
         <Stack.Screen name="create-group" />
         <Stack.Screen name="create-status" />
-        <Stack.Screen name="status-viewer" />
+        
       </Stack>
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </>

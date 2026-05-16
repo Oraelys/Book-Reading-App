@@ -1,391 +1,165 @@
-// app/(tabs)/social.tsx - Enhanced with Status and Better Chat
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  Image,
-  StyleSheet,
-  ActivityIndicator,
-  ScrollView,
-  RefreshControl,
-  Animated,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { Search, MessageCircle, Plus, Users, Image as ImageIcon, X, Camera } from 'lucide-react-native';
-import { ChatService, ChatRoom, StatusUpdate } from '@/services/chatservices';
+// app/(tabs)/social.tsx - Refactored: performance-optimized with split sub-components
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { StyleSheet } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContexts';
+import { ChatService, ChatRoom, StatusUpdate } from '@/services/chatservices';
 
-export default function SocialScreen() {
-  const router = useRouter();
+import ChatView from '@/components/chat/ChatView';
+import StatusCreateView from '@/components/chat/StatusCreateView';
+import MainListView from '@/components/chat/MainListView';
+
+type ViewMode = 'list' | 'chat' | 'status-create' | 'status-view';
+
+export default function UnifiedSocialScreen() {
   const { user } = useAuth();
   const { theme, isDark } = useTheme();
+
+  // ---------------------------------------------------------------------------
+  // Shared data — lives here so it survives view transitions without refetching
+  // ---------------------------------------------------------------------------
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const [statuses, setStatuses] = useState<StatusUpdate[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [fabOpen, setFabOpen] = useState(false);
-  const [fabAnimation] = useState(new Animated.Value(0));
+  const [socialLoading, setSocialLoading] = useState(true);
 
-  const styles = getStyles(theme, isDark);
+  // Navigation state
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [activeRoom, setActiveRoom] = useState<ChatRoom | undefined>(undefined);
 
-  useEffect(() => {
-    loadData();
-  }, [user]);
+  // Memoize styles so getStyles isn't called on every render
+  const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
 
-  const loadData = async () => {
-    if (!user) return;
-
-    try {
-      const [rooms, statusList] = await Promise.all([
-        ChatService.getUserChatRooms(user.id),
-        ChatService.getContactStatuses(user.id),
-      ]);
-
-      setChatRooms(rooms);
-      setStatuses(statusList);
-    } catch (error) {
-      console.error('Error loading social data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  };
-
-  const toggleFab = () => {
-    const toValue = fabOpen ? 0 : 1;
-    Animated.spring(fabAnimation, {
-      toValue,
-      useNativeDriver: true,
-      friction: 6,
-    }).start();
-    setFabOpen(!fabOpen);
-  };
-
-  const handleFabAction = (action: 'chat' | 'group' | 'status') => {
-    toggleFab();
-    setTimeout(() => {
-      if (action === 'chat') {
-        router.push('/search-users');
-      } else if (action === 'group') {
-        router.push('/create-group');
-      } else if (action === 'status') {
-        router.push('/create-status');
-      }
-    }, 200);
-  };
-
-  const handleChatPress = async (room: ChatRoom) => {
-    // Mark as read when opening
-    await ChatService.markRoomAsRead(room.id);
-    
-    // Refresh chat rooms to update unread count
-    loadData();
-    
-    router.push(`/chat-room?roomId=${room.id}`);
-  };
-
-  const handleStatusPress = (status: StatusUpdate) => {
-    router.push(`/status-viewer?statusId=${status.id}`);
-  };
-
-  const handleSearchPress = () => {
-    router.push('/search-users');
-  };
-
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m`;
-    if (diffHours < 24) return `${diffHours}h`;
-    if (diffDays < 7) return `${diffDays}d`;
-    return date.toLocaleDateString();
-  };
-
-  const getLastMessage = (room: ChatRoom) => {
-    if (!room.last_message) return 'No messages yet';
-    
-    const { message_type, message_text, profile, user_id } = room.last_message;
-    const isOwn = user_id === user?.id;
-    const sender = isOwn ? 'You' : (profile?.username || 'Someone');
-    
-    if (message_type === 'image') return `${sender}: 📷 Photo`;
-    if (message_type === 'video') return `${sender}: 🎥 Video`;
-    return `${isOwn ? 'You: ' : ''}${message_text || ''}`;
-  };
-
-  const renderStatusItem = ({ item }: { item: StatusUpdate }) => (
-    <TouchableOpacity
-      style={styles.statusItem}
-      onPress={() => handleStatusPress(item)}
-    >
-      <View style={[
-        styles.statusRing,
-        item.has_viewed ? styles.statusRingViewed : styles.statusRingUnviewed
-      ]}>
-        <Image
-          source={{ uri: item.profile?.avatar_url || 'https://via.placeholder.com/50' }}
-          style={styles.statusAvatar}
-        />
-      </View>
-      <Text style={[styles.statusName, { color: theme.text }]} numberOfLines={1}>
-        {item.profile?.username || 'User'}
-      </Text>
-    </TouchableOpacity>
+  const ownAvatarUrl: string = useMemo(
+    () => user?.user_metadata?.avatar_url || '',
+    [user?.user_metadata?.avatar_url]
   );
 
-  const renderChatItem = ({ item }: { item: ChatRoom }) => {
-    const otherMember = item.members?.find(m => m.user_id !== user?.id);
-    const displayName = item.room_type === 'direct'
-      ? otherMember?.profile?.username || 'Unknown'
-      : item.name;
-    const avatarUrl = item.room_type === 'direct'
-      ? otherMember?.profile?.avatar_url
-      : item.avatar_url;
+  // Initial load — runs once when user is available
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
 
-    return (
-      <TouchableOpacity
-        style={styles.chatItem}
-        onPress={() => handleChatPress(item)}
-      >
-        <View style={styles.avatarContainer}>
-          <Image
-            source={{ uri: avatarUrl || 'https://via.placeholder.com/50' }}
-            style={styles.chatAvatar}
-          />
-          {item.room_type === 'group' && (
-            <View style={[styles.groupBadge, { backgroundColor: theme.primary }]}>
-              <Users size={12} color="#fff" />
-            </View>
-          )}
-        </View>
+    const load = async () => {
+      try {
+        const [rooms, statusList] = await Promise.all([
+          ChatService.getUserChatRooms(user.id),
+          ChatService.getContactStatuses(user.id),
+        ]);
+        if (!cancelled) {
+          setChatRooms(rooms);
+          setStatuses(statusList);
+        }
+      } catch (error) {
+        console.error('Error loading social data:', error);
+      } finally {
+        if (!cancelled) setSocialLoading(false);
+      }
+    };
 
-        <View style={styles.chatInfo}>
-          <View style={styles.chatHeader}>
-            <Text style={[styles.chatName, { color: theme.text }]} numberOfLines={1}>
-              {displayName}
-            </Text>
-            <Text style={[styles.chatTime, { color: theme.textSecondary }]}>
-              {item.last_message ? formatTime(item.last_message.created_at) : ''}
-            </Text>
-          </View>
+    load();
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
-          <View style={styles.chatMessage}>
-            <Text style={[styles.lastMessage, { color: theme.textSecondary }]} numberOfLines={1}>
-              {getLastMessage(item)}
-            </Text>
-            {(item.unread_count || 0) > 0 && (
-              <View style={[styles.unreadBadge, { backgroundColor: theme.primary }]}>
-                <Text style={styles.unreadText}>
-                  {item.unread_count! > 99 ? '99+' : item.unread_count}
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </TouchableOpacity>
+  const refreshRooms = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const rooms = await ChatService.getUserChatRooms(user.id);
+      setChatRooms(rooms);
+    } catch (error) {
+      console.error('Error refreshing rooms:', error);
+    }
+  }, [user?.id]);
+
+  const refreshStatuses = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const statusList = await ChatService.getContactStatuses(user.id);
+      setStatuses(statusList);
+    } catch (error) {
+      console.error('Error refreshing statuses:', error);
+    }
+  }, [user?.id]);
+
+  const refreshAll = useCallback(async () => {
+    await Promise.all([refreshRooms(), refreshStatuses()]);
+  }, [refreshRooms, refreshStatuses]);
+
+  const handleChatPress = useCallback((room: ChatRoom) => {
+    // Optimistically clear the unread badge immediately — no round-trip needed
+    setChatRooms(prev =>
+      prev.map(r => r.id === room.id ? { ...r, unread_count: 0 } : r)
     );
-  };
+    setActiveRoomId(room.id);
+    setActiveRoom(room);
+    setViewMode('chat');
+  }, []);
 
-  if (loading) {
+  const handleStatusPress = useCallback((_status: StatusUpdate) => {
+    // status-view is inline in MainListView; keeping hook for future expansion
+  }, []);
+
+  const handleCreateStatus = useCallback(() => {
+    setViewMode('status-create');
+  }, []);
+
+  const handleBackToList = useCallback(() => {
+    setViewMode('list');
+    setActiveRoomId(null);
+    setActiveRoom(undefined);
+  }, []);
+
+  const handleStatusPosted = useCallback(async () => {
+    handleBackToList();
+    // Only refresh statuses — chat rooms are unchanged
+    await refreshStatuses();
+  }, [handleBackToList, refreshStatuses]);
+
+  // Only the active view is mounted — avoids rendering idle heavy components
+  if (viewMode === 'chat' && activeRoomId) {
     return (
-      <View style={[styles.centerContainer, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-      </View>
+      <ChatView
+        activeRoomId={activeRoomId}
+        activeRoom={activeRoom}
+        currentUserId={user?.id}
+        ownAvatarUrl={ownAvatarUrl}
+        onBack={handleBackToList}
+        theme={theme}
+        styles={styles}
+      />
     );
   }
 
-  const fabTranslateY1 = fabAnimation.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -140],
-  });
-
-  const fabTranslateY2 = fabAnimation.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -80],
-  });
-
-  const fabTranslateY3 = fabAnimation.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -20],
-  });
-
-  const fabRotate = fabAnimation.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '45deg'],
-  });
-
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>Messages</Text>
-      </View>
-
-      {/* Search Bar */}
-      <TouchableOpacity
-        style={[styles.searchContainer, { backgroundColor: theme.surface }]}
-        onPress={handleSearchPress}
-      >
-        <Search size={20} color={theme.placeholder} />
-        <Text style={[styles.searchPlaceholder, { color: theme.placeholder }]}>
-          Search users...
-        </Text>
-      </TouchableOpacity>
-
-      {/* Status Updates */}
-      {statuses.length > 0 && (
-        <View style={[styles.statusSection, { borderBottomColor: theme.border }]}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.statusList}
-          >
-            {/* My Status */}
-            <TouchableOpacity
-              style={styles.statusItem}
-              onPress={() => router.push('/create-status')}
-            >
-              <View style={[styles.statusRing, styles.statusRingViewed]}>
-                <View style={styles.myStatusAvatar}>
-                  <Camera size={20} color={theme.primary} />
-                </View>
-              </View>
-              <Text style={[styles.statusName, { color: theme.text }]} numberOfLines={1}>
-                Your Story
-              </Text>
-            </TouchableOpacity>
-
-            <FlatList
-              data={statuses}
-              renderItem={renderStatusItem}
-              keyExtractor={(item) => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-            />
-          </ScrollView>
-        </View>
-      )}
-
-      {/* Chat List */}
-      <FlatList
-        data={chatRooms}
-        renderItem={renderChatItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.chatList}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={theme.primary}
-            colors={[theme.primary]}
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <MessageCircle size={64} color={theme.border} />
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>No chats yet</Text>
-            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-              Tap the + button to start a conversation
-            </Text>
-          </View>
-        }
+  if (viewMode === 'status-create') {
+    return (
+      <StatusCreateView
+        onBack={handleBackToList}
+        onPosted={handleStatusPosted}
+        styles={styles}
       />
+    );
+  }
 
-      {/* Floating Action Buttons */}
-      <View style={styles.fabContainer}>
-        {/* Backdrop */}
-        {fabOpen && (
-          <TouchableOpacity
-            style={styles.fabBackdrop}
-            activeOpacity={1}
-            onPress={toggleFab}
-          />
-        )}
-
-        {/* FAB Options */}
-        <Animated.View
-          style={[
-            styles.fabOption,
-            {
-              transform: [{ translateY: fabTranslateY1 }, { scale: fabAnimation }],
-              opacity: fabAnimation,
-            },
-          ]}
-        >
-          <TouchableOpacity
-            style={[styles.fabButton, styles.fabOptionButton, { backgroundColor: theme.primary }]}
-            onPress={() => handleFabAction('status')}
-          >
-            <ImageIcon size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={[styles.fabLabel, { color: theme.text, backgroundColor: theme.surface }]}>Status</Text>
-        </Animated.View>
-
-        <Animated.View
-          style={[
-            styles.fabOption,
-            {
-              transform: [{ translateY: fabTranslateY2 }, { scale: fabAnimation }],
-              opacity: fabAnimation,
-            },
-          ]}
-        >
-          <TouchableOpacity
-            style={[styles.fabButton, styles.fabOptionButton, { backgroundColor: theme.primary }]}
-            onPress={() => handleFabAction('group')}
-          >
-            <Users size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={[styles.fabLabel, { color: theme.text, backgroundColor: theme.surface }]}>Group</Text>
-        </Animated.View>
-
-        <Animated.View
-          style={[
-            styles.fabOption,
-            {
-              transform: [{ translateY: fabTranslateY3 }, { scale: fabAnimation }],
-              opacity: fabAnimation,
-            },
-          ]}
-        >
-          <TouchableOpacity
-            style={[styles.fabButton, styles.fabOptionButton, { backgroundColor: theme.primary }]}
-            onPress={() => handleFabAction('chat')}
-          >
-            <MessageCircle size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={[styles.fabLabel, { color: theme.text, backgroundColor: theme.surface }]}>Chat</Text>
-        </Animated.View>
-
-        {/* Main FAB */}
-        <Animated.View style={{ transform: [{ rotate: fabRotate }] }}>
-          <TouchableOpacity
-            style={[styles.fabButton, styles.fabMain, { backgroundColor: theme.primary }]}
-            onPress={toggleFab}
-          >
-            <Plus size={28} color="#fff" />
-          </TouchableOpacity>
-        </Animated.View>
-      </View>
-    </SafeAreaView>
+  // Default: main list — receives already-loaded data, never refetches on mount
+  return (
+    <MainListView
+      currentUserId={user?.id}
+      chatRooms={chatRooms}
+      statuses={statuses}
+      loading={socialLoading}
+      onRefresh={refreshAll}
+      onChatPress={handleChatPress}
+      onStatusPress={handleStatusPress}
+      onCreateStatus={handleCreateStatus}
+      theme={theme}
+      styles={styles}
+    />
   );
 }
 
+// ---------------------------------------------------------------------------
+// Styles — defined once at module level, memoized in the component via useMemo
+// ---------------------------------------------------------------------------
 const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
@@ -406,6 +180,19 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
   },
+  headerInfo: {
+    flex: 1,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  backButton: {
+    padding: 8,
+  },
+  moreButton: {
+    padding: 8,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -420,9 +207,15 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     fontSize: 16,
   },
   statusSection: {
-    marginBottom: 16,
+    paddingVertical: 16,
+    marginBottom: 8,
     borderBottomWidth: 1,
-    paddingBottom: 16,
+  },
+  statusSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    paddingHorizontal: 20,
+    marginBottom: 12,
   },
   statusList: {
     paddingHorizontal: 20,
@@ -431,6 +224,17 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   statusItem: {
     alignItems: 'center',
     width: 70,
+  },
+  myStatusRing: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+    position: 'relative',
   },
   statusRing: {
     width: 70,
@@ -441,11 +245,9 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   },
   statusRingViewed: {
     borderWidth: 2,
-    borderColor: theme.border,
   },
   statusRingUnviewed: {
     borderWidth: 3,
-    borderColor: theme.primary,
   },
   statusAvatar: {
     width: '100%',
@@ -455,12 +257,22 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     borderColor: theme.background,
   },
   myStatusAvatar: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 32,
-    backgroundColor: theme.surface,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  addStatusButton: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
   },
   statusName: {
     fontSize: 12,
@@ -493,7 +305,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: theme.background,
   },
   chatInfo: {
     flex: 1,
@@ -551,6 +362,189 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   emptyText: {
     fontSize: 14,
     textAlign: 'center',
+  },
+  messagesList: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  messageRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    gap: 8,
+  },
+  messageRowOwn: {
+    justifyContent: 'flex-end',
+  },
+  messageRowOther: {
+    justifyContent: 'flex-start',
+  },
+  messageAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  messageBubble: {
+    maxWidth: '70%',
+    borderRadius: 16,
+    padding: 12,
+  },
+  messageBubbleOwn: {
+    borderBottomRightRadius: 4,
+  },
+  messageBubbleOther: {
+    borderBottomLeftRadius: 4,
+  },
+  senderName: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  messageImage: {
+    width: 200,
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  videoContainer: {
+    position: 'relative',
+    width: 200,
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  playButton: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -16 }, { translateY: -16 }],
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  messageText: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  messageTextOwn: {
+    color: '#fff',
+  },
+  messageTime: {
+    fontSize: 11,
+    marginTop: 4,
+  },
+  messageTimeOwn: {
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    gap: 8,
+  },
+  mediaButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  input: {
+    flex: 1,
+    minHeight: 40,
+    maxHeight: 100,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 15,
+  },
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  statusHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  postButton: {
+    padding: 8,
+  },
+  postButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0a84ff',
+  },
+  postButtonTextDisabled: {
+    color: '#666',
+  },
+  statusContent: {
+    flex: 1,
+    padding: 16,
+  },
+  mediaContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  mediaPreview: {
+    width: '100%',
+    height: '100%',
+    maxHeight: 500,
+  },
+  removeMediaButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mediaPickerContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 32,
+  },
+  mediaPickerButton: {
+    alignItems: 'center',
+    gap: 16,
+  },
+  mediaPickerText: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  captionContainer: {
+    marginTop: 16,
+  },
+  captionInput: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: '#fff',
+    minHeight: 100,
+    textAlignVertical: 'top',
   },
   fabContainer: {
     position: 'absolute',

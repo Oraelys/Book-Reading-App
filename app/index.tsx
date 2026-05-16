@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#0077ffff",
+    backgroundColor: "#212222ff",
   },
   logoContainer: {
     marginBottom: 30,
