@@ -21,6 +21,13 @@ import SearchModalView from '@/components/home/SearchModalView';
 import {
   CarouselSkeleton, ContinueReadingSkeleton, BookSectionSkeleton,
 } from '@/components/home/Skeletons';
+// TODO: remove this import and USE_MOCK once real data is confirmed working
+import {
+  MOCK_CONTINUE_READING, MOCK_NOVELS_BY_CATEGORY, MOCK_ADS,
+} from '@/lib/mockData';
+
+// Flip to false once your Supabase data is populated
+const USE_MOCK = true;
 
 // Major genres shown as sections — order determines render order
 const MAJOR_GENRES = [
@@ -190,6 +197,11 @@ export default function HomeScreen() {
   // Advertisements
   // ---------------------------------------------------------------------------
   const loadAds = async () => {
+    if (USE_MOCK) {
+      setAds(MOCK_ADS);
+      setAdsLoading(false);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('advertisements')
@@ -199,9 +211,11 @@ export default function HomeScreen() {
         .limit(6);
 
       if (error) console.warn('[Home] ads:', error.message);
-      setAds((data as Advertisement[]) ?? []);
+      const result = (data as Advertisement[]) ?? [];
+      setAds(result.length > 0 ? result : MOCK_ADS);
     } catch (e) {
       console.warn('[Home] loadAds:', e);
+      setAds(MOCK_ADS);
     } finally {
       setAdsLoading(false);
     }
@@ -214,9 +228,13 @@ export default function HomeScreen() {
   // two-step query using in() on the book_ids.
   // ---------------------------------------------------------------------------
   const loadContinueReading = async () => {
+    if (USE_MOCK) {
+      setContinueReading(MOCK_CONTINUE_READING);
+      setContinueLoading(false);
+      return;
+    }
     if (!user) return;
     try {
-      // Step 1: get in-progress book_ids for this user
       const { data: progressRows, error: progressError } = await supabase
         .from('reading_progress')
         .select('book_id, progress_percentage, current_page, last_read')
@@ -229,40 +247,27 @@ export default function HomeScreen() {
       console.log('[CR] progressRows:', JSON.stringify(progressRows));
       console.log('[CR] progressError:', progressError?.message);
 
-      if (progressError) {
-        console.warn('[Home] reading_progress:', progressError.message);
+      if (progressError || !progressRows || progressRows.length === 0) {
+        setContinueReading(MOCK_CONTINUE_READING);
         return;
       }
 
-      if (!progressRows || progressRows.length === 0) {
-        console.log('[CR] No in-progress books found for user', user.id);
-        setContinueReading([]);
-        return;
-      }
-
-      // Step 2: fetch the actual novel rows by id
-      const bookIds = progressRows.map(r => r.book_id);
-      console.log('[CR] fetching novels for ids:', bookIds);
-
+      const bookIds = progressRows.map((r: any) => r.book_id);
       const { data: novelsData, error: novelsError } = await supabase
         .from('novels')
         .select('id, title, author, description, category, cover_image_url, rating, total_ratings, views')
         .in('id', bookIds)
         .eq('is_public', true);
 
-      console.log('[CR] novelsData count:', novelsData?.length);
-      console.log('[CR] novelsError:', novelsError?.message);
-
-      if (novelsError) {
-        console.warn('[Home] novels for continue reading:', novelsError.message);
+      if (novelsError || !novelsData || novelsData.length === 0) {
+        setContinueReading(MOCK_CONTINUE_READING);
         return;
       }
 
-      // Merge progress into novel objects, preserving last_read order
       const novelMap = new Map((novelsData ?? []).map((n: any) => [n.id, n]));
       const merged = progressRows
-        .filter(r => novelMap.has(r.book_id))
-        .map(r => ({
+        .filter((r: any) => novelMap.has(r.book_id))
+        .map((r: any) => ({
           ...novelMap.get(r.book_id)!,
           reading_progress: {
             progress_percentage: r.progress_percentage,
@@ -270,19 +275,27 @@ export default function HomeScreen() {
           },
         })) as Novel[];
 
-      console.log('[CR] merged novels:', merged.length);
-      setContinueReading(merged);
+      setContinueReading(merged.length > 0 ? merged : MOCK_CONTINUE_READING);
     } catch (e) {
       console.warn('[Home] loadContinueReading:', e);
+      setContinueReading(MOCK_CONTINUE_READING);
     } finally {
       setContinueLoading(false);
     }
   };
 
-  // ---------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------
   // Novels grouped by major category + their tags for the book card pills
   // ---------------------------------------------------------------------------
   const loadNovels = async () => {
+    if (USE_MOCK) {
+      const grouped = new Map<string, Novel[]>(
+        Object.entries(MOCK_NOVELS_BY_CATEGORY)
+      );
+      setNovelsByCategory(grouped);
+      setSectionsLoading(false);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('novels_with_tags')
@@ -291,56 +304,43 @@ export default function HomeScreen() {
         .order('views', { ascending: false })
         .limit(200);
 
-      console.log('[Novels] total fetched:', data?.length);
-      console.log('[Novels] error:', error?.message);
+      console.log('[Novels] total fetched:', data?.length, 'error:', error?.message);
 
-      if (error) {
-        console.warn('[Home] novels_with_tags:', error.message);
-        // Fallback: try querying novels directly without the view
-        const { data: fallback, error: fallbackError } = await supabase
-          .from('novels')
-          .select('id, title, author, description, category, cover_image_url, rating, total_ratings, views')
-          .eq('is_public', true)
-          .order('views', { ascending: false })
-          .limit(200);
-
-        console.log('[Novels] fallback count:', fallback?.length);
-        console.log('[Novels] fallback error:', fallbackError?.message);
-
-        if (fallback && fallback.length > 0) {
-          const grouped = new Map<string, Novel[]>();
-          for (const novel of fallback as Novel[]) {
-            const cat = novel.category;
-            if (!cat) continue;
-            if (!grouped.has(cat)) grouped.set(cat, []);
-            grouped.get(cat)!.push(novel);
-          }
-          console.log('[Novels] fallback categories:', Array.from(grouped.keys()));
-          setNovelsByCategory(grouped);
-        }
+      if (error || !data || data.length === 0) {
+        // Fall back to mock
+        const grouped = new Map<string, Novel[]>(Object.entries(MOCK_NOVELS_BY_CATEGORY));
+        setNovelsByCategory(grouped);
         return;
       }
 
-      // Group by category
       const grouped = new Map<string, Novel[]>();
-      for (const novel of (data as Novel[]) ?? []) {
+      for (const novel of data as Novel[]) {
         const cat = novel.category;
         if (!cat) continue;
         if (!grouped.has(cat)) grouped.set(cat, []);
         grouped.get(cat)!.push(novel);
       }
 
-      console.log('[Novels] categories found:', Array.from(grouped.keys()));
-      console.log('[Novels] counts per category:', Array.from(grouped.entries()).map(([k, v]) => `${k}:${v.length}`));
-      setNovelsByCategory(grouped);
+      console.log('[Novels] categories:', Array.from(grouped.keys()));
+
+      // If real data has no recognisable categories, use mock
+      const hasKnownCategory = MAJOR_GENRES.some(g => grouped.has(g));
+      if (!hasKnownCategory) {
+        const mockGrouped = new Map<string, Novel[]>(Object.entries(MOCK_NOVELS_BY_CATEGORY));
+        setNovelsByCategory(mockGrouped);
+      } else {
+        setNovelsByCategory(grouped);
+      }
     } catch (e) {
       console.warn('[Home] loadNovels:', e);
+      const grouped = new Map<string, Novel[]>(Object.entries(MOCK_NOVELS_BY_CATEGORY));
+      setNovelsByCategory(grouped);
     } finally {
       setSectionsLoading(false);
     }
   };
 
-  // ---------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------
   // Handlers
   // ---------------------------------------------------------------------------
   const handleBookPress = useCallback(async (bookId: string) => {
