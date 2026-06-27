@@ -43,7 +43,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="create-novel"
+        name="author-dashboard"
         options={{
           title: 'Create',
           tabBarIcon: ({ size, color }) => <PenTool size={size} color={color} />,

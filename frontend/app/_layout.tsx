@@ -1,7 +1,7 @@
 // app/_layout.tsx
 import { useEffect, useState } from 'react';
 import { Stack, useRouter, useSegments, SplashScreen } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import { StatusBar } from 'react-native';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContexts';
@@ -75,10 +75,10 @@ function RootLayoutNav() {
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="user-profile" />
         <Stack.Screen name="create-group" />
-        <Stack.Screen name="create-status" />
+        <Stack.Screen name="create-status" /> 
         
       </Stack>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
+     
     </>
   );
 }

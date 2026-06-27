@@ -76,7 +76,7 @@ export default function SplashScreen() {
       </Animated.View>
 
       <Animated.View style={[styles.textContainer, { opacity: fadeAnim }]}>
-        <Text style={styles.title}>Inkverse</Text>
+        <Text style={styles.title}>Inkwell</Text>
         <Text style={styles.subtitle}>Your Reading Companion</Text>
       </Animated.View>
 
