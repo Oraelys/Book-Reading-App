@@ -1,4 +1,4 @@
-package com.anonymous.Inkverse
+package com.anonymous.Inkwell
 
 import android.app.Application
 import android.content.res.Configuration

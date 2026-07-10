@@ -209,7 +209,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   statusSection: {
     paddingVertical: 16,
     marginBottom: 8,
-    borderBottomWidth: 1,
   },
   statusSectionTitle: {
     fontSize: 16,

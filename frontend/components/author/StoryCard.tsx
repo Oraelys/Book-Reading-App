@@ -1,13 +1,8 @@
-// components/author/StoryCard.tsx
-// Full-width vertical card: cover LEFT, title + tags + chapter stats RIGHT.
-// Matches the home page's card aesthetic (rounded corners, theme.surface,
-// uniform primary-tinted tag pills, soft shadow).
-import React, { memo } from 'react';
-import {
-  View, Text, Image, TouchableOpacity, StyleSheet, Platform,
-} from 'react-native';
-import { BookOpen, CheckCircle2 } from 'lucide-react-native';
-import { Story } from '@/types/author'; 
+import React, { memo, useCallback } from 'react';
+import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
+import { Eye, Users, BookOpen } from 'lucide-react-native';
+import StatBadge from './StatsBadge';
+import { Story } from '@/types/author';
 
 interface StoryCardProps {
   story: Story;
@@ -15,131 +10,70 @@ interface StoryCardProps {
   theme: any;
 }
 
-const MAX_TAGS = 3;
-
-const StoryCard = memo(({ story, onPress, theme }: StoryCardProps) => {
-  const visibleTags = story.tags?.slice(0, MAX_TAGS) ?? [];
-  const handlePress = () => onPress(story);
+function StoryCard({ story, onPress, theme }: StoryCardProps) {
+  const styles = getStyles(theme);
+  const handlePress = useCallback(() => onPress(story), [onPress, story]);
 
   return (
-    <TouchableOpacity
-      style={[styles.card, { backgroundColor: theme.surface }]}
-      onPress={handlePress}
-      activeOpacity={0.88}
-    >
-      {/* Cover */}
+    <Pressable onPress={handlePress} style={styles.card}>
       <Image
-        source={{ uri: story.cover_image_url }}
+        source={story.cover_image_url ? { uri: story.cover_image_url } : undefined}
         style={styles.cover}
-        defaultSource={require('@/assets/images/book-placeholder.png')}
       />
-
-      {/* Info */}
       <View style={styles.info}>
         <Text style={[styles.title, { color: theme.text }]} numberOfLines={2}>
           {story.title}
         </Text>
 
-        {/* Tag pills — uniform primary tint, no icons */}
-        {visibleTags.length > 0 && (
-          <View style={styles.tagRow}>
-            {visibleTags.map(tag => (
-              <View
-                key={tag.id}
-                style={[styles.tagPill, { backgroundColor: theme.primary + '1A' }]}
-              >
-                <Text style={[styles.tagText, { color: theme.primary }]} numberOfLines={1}>
-                  {tag.name}
-                </Text>
-              </View>
-            ))}
+        {story.status === 'draft' && (
+          <View style={[styles.badge, { backgroundColor: theme.background, borderColor: theme.border }]}>
+            <Text style={[styles.badgeText, { color: theme.textSecondary }]}>Draft</Text>
           </View>
         )}
 
-        {/* Chapter stats */}
         <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <BookOpen size={13} color={theme.textSecondary} />
-            <Text style={[styles.statText, { color: theme.textSecondary }]}>
-              {story.total_chapters} {story.total_chapters === 1 ? 'chapter' : 'chapters'}
-            </Text>
-          </View>
-          <View style={styles.statItem}>
-            <CheckCircle2 size={13} color={theme.primary} />
-            <Text style={[styles.statText, { color: theme.primary }]}>
-              {story.published_chapters} published
-            </Text>
-          </View>
+          <StatBadge icon={Eye} value={formatCount(story.views)} theme={theme} />
+          <StatBadge icon={Users} value={formatCount(story.followers ?? 0)} theme={theme} />
+          <StatBadge icon={BookOpen} value={`${story.published_chapters}/${story.total_chapters}`} theme={theme} />
         </View>
       </View>
-    </TouchableOpacity>
+    </Pressable>
   );
-});
+}
 
-StoryCard.displayName = 'StoryCard';
-export default StoryCard;
+function formatCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return `${n}`;
+}
 
-const styles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    borderRadius: 14,
-    padding: 12,
-    gap: 12,
-    marginBottom: 14,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.07,
-        shadowRadius: 4,
-      },
-      android: { elevation: 2 },
-    }),
-  },
-  cover: {
-    width: 78,
-    height: 112,
-    borderRadius: 10,
-  },
-  info: {
-    flex: 1,
-    justifyContent: 'space-between',
-    paddingVertical: 2,
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: '700',
-    lineHeight: 20,
-    marginBottom: 6,
-  },
-  tagRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginBottom: 8,
-  },
-  tagPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    maxWidth: 110,
-  },
-  tagText: {
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-});
+const getStyles = (theme: any) =>
+  StyleSheet.create({
+    card: {
+      flexDirection: 'row',
+      backgroundColor: theme.surface,
+      borderRadius: 16,
+      padding: 12,
+      marginBottom: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    cover: { width: 64, height: 96, borderRadius: 8, backgroundColor: theme.border },
+    info: { flex: 1, marginLeft: 12, justifyContent: 'center' },
+    title: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
+    badge: {
+      alignSelf: 'flex-start',
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 8,
+      borderWidth: 1,
+      marginBottom: 8,
+    },
+    badgeText: { fontSize: 11, fontWeight: '600' },
+    statsRow: { flexDirection: 'row', gap: 16 },
+  });
+
+export default memo(StoryCard);

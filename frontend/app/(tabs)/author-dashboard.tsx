@@ -136,15 +136,18 @@ export default function AuthorDashboardScreen() {
   }, [router]);
 
   const handleStoriesPress = useCallback(() => {
-    router.push('/(tabs)/author-dashboard');
+    console.log('[AuthorDashboard] navigating to stories-management');
+    router.push('/stories-management' as any);
   }, [router]);
 
   const handleSeriesPress = useCallback(() => {
-    router.push('/(tabs)/series-screen' as any);
+    console.log('[AuthorDashboard] navigating to series-screen');
+    router.push('/create-series' as any);
   }, [router]);
 
   const handleCreatePress = useCallback(() => {
-    router.push("/../components/author/create-novel" as any);
+    console.log('[AuthorDashboard] navigating to create-novel');
+    router.push('/create-novel' as any);
   }, [router]);
 
   const onRefresh = useCallback(async () => {

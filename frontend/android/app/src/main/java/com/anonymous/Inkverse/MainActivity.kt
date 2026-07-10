@@ -1,4 +1,4 @@
-package com.anonymous.Inkverse
+package com.anonymous.Inkwell
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
