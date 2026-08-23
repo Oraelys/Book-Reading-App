@@ -18,6 +18,9 @@ import { ChapterOrderService } from './providers/chapter-order.service';
 import { ChapterLockService } from './providers/chapter-lock.service';
 import { ChapterPublishService } from './providers/chapter-publish.service';
 import { ChapterSearchService } from './providers/chapter-search.service';
+import { WritingAuthGuard } from './guards/writing-auth.guard';
+
+import { WritingAuthorizationService } from './services/writing-authorization.service';
 
 @Module({
   imports: [
@@ -30,36 +33,42 @@ import { ChapterSearchService } from './providers/chapter-search.service';
     DraftController,
   ],
 
-  providers: [
-    // Core domain services
-    WritingService,
-    ChapterService,
-    DraftService,
+providers: [
+  // Core domain services
+  WritingService,
+  ChapterService,
+  DraftService,
 
-    // Chapter infrastructure
-    ChapterAutosaveService,
-    ChapterHistoryService,
-    ChapterVersionService,
-    ChapterMetricsService,
-    ChapterOrderService,
-    ChapterLockService,
-    ChapterPublishService,
-    ChapterSearchService,
-  ],
+  // Chapter infrastructure
+  ChapterAutosaveService,
+  ChapterHistoryService,
+  ChapterVersionService,
+  ChapterMetricsService,
+  ChapterOrderService,
+  ChapterLockService,
+  ChapterPublishService,
+  ChapterSearchService,
 
-  exports: [
-    WritingService,
-    ChapterService,
-    DraftService,
+  // Writing security
+  WritingAuthGuard,
+  WritingAuthorizationService,
+],
 
-    ChapterAutosaveService,
-    ChapterHistoryService,
-    ChapterVersionService,
-    ChapterMetricsService,
-    ChapterOrderService,
-    ChapterLockService,
-    ChapterPublishService,
-    ChapterSearchService,
-  ],
+exports: [
+  WritingService,
+  ChapterService,
+  DraftService,
+
+  ChapterAutosaveService,
+  ChapterHistoryService,
+  ChapterVersionService,
+  ChapterMetricsService,
+  ChapterOrderService,
+  ChapterLockService,
+  ChapterPublishService,
+  ChapterSearchService,
+
+  WritingAuthorizationService,
+],
 })
 export class WritingModule {}

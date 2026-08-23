@@ -36,6 +36,19 @@ import {
   ChapterSearchService,
 } from '../providers/chapter-search.service';
 
+import {
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+
+import {
+  WritingAuthGuard,
+} from '../guards/writing-auth.guard';
+
+import {
+  WritingAuthorizationService,
+} from '../services/writing-authorization.service';
+
 import { SaveDraftDto } from '../dto/save-draft.dto';
 import { AutosaveDto } from '../dto/autosave.dto';
 import { RestoreVersionDto } from '../dto/restore-version.dto';
@@ -66,6 +79,9 @@ export class ChapterController {
 
     private readonly chapterSearchService:
       ChapterSearchService,
+
+      private readonly authorization:
+  WritingAuthorizationService,
   ) {}
 
   /*
@@ -74,37 +90,68 @@ export class ChapterController {
    * ==========================================
    */
 
-  @Post()
-  createChapter(
-    @Body()
-    dto: any,
-  ) {
-    return this.chapterService.create(dto);
-  }
+ @Post()
+@UseGuards(WritingAuthGuard)
+async createChapter(
+  @Body()
+  dto: any,
 
-  @Patch(':id')
-  updateChapter(
-    @Param('id')
-    id: string,
+  @Req()
+  request: any,
+) {
+  await this.authorization.assertNovelOwner(
+    dto.novel_id,
+    request.user.id,
+  );
 
-    @Body()
-    dto: any,
-  ) {
-    return this.chapterService.update(
+  return this.chapterService.create(
+    dto,
+  );
+}
+
+@Patch(':id')
+@UseGuards(WritingAuthGuard)
+async updateChapter(
+  @Param('id')
+  id: string,
+
+  @Body()
+  dto: any,
+
+  @Req()
+  request: any,
+) {
+  await this.authorization
+    .assertChapterOwner(
       id,
-      dto,
+      request.user.id,
     );
-  }
 
-  @Delete(':id')
-  deleteChapter(
-    @Param('id')
-    id: string,
-  ) {
-    return this.chapterService.remove(
+  return this.chapterService.update(
+    id,
+    dto,
+  );
+}
+
+@Delete(':id')
+@UseGuards(WritingAuthGuard)
+async deleteChapter(
+  @Param('id')
+  id: string,
+
+  @Req()
+  request: any,
+) {
+  await this.authorization
+    .assertChapterOwner(
       id,
+      request.user.id,
     );
-  }
+
+  return this.chapterService.remove(
+    id,
+  );
+}
 
   /*
    * ==========================================
@@ -138,33 +185,53 @@ export class ChapterController {
    * ==========================================
    */
 
-  @Post(':id/save')
-  saveDraft(
-    @Param('id')
-    id: string,
+@Post(':id/save')
+@UseGuards(WritingAuthGuard)
+async saveDraft(
+  @Param('id')
+  id: string,
 
-    @Body()
-    dto: SaveDraftDto,
-  ) {
-    return this.draftService.save(
+  @Body()
+  dto: SaveDraftDto,
+
+  @Req()
+  request: any,
+) {
+  await this.authorization
+    .assertChapterOwner(
       id,
-      dto.content,
+      request.user.id,
     );
-  }
 
-  @Post(':id/autosave')
-  autosaveChapter(
-    @Param('id')
-    id: string,
+  return this.draftService.save(
+    id,
+    dto.content,
+  );
+}
 
-    @Body()
-    dto: AutosaveDto,
-  ) {
-    return this.autosaveService.autosave(
+@Post(':id/autosave')
+@UseGuards(WritingAuthGuard)
+async autosaveChapter(
+  @Param('id')
+  id: string,
+
+  @Body()
+  dto: AutosaveDto,
+
+  @Req()
+  request: any,
+) {
+  await this.authorization
+    .assertChapterOwner(
       id,
-      dto.content,
+      request.user.id,
     );
-  }
+
+  return this.autosaveService.autosave(
+    id,
+    dto.content,
+  );
+}
 
   /*
    * ==========================================
@@ -172,25 +239,45 @@ export class ChapterController {
    * ==========================================
    */
 
-  @Get(':id/history')
-  getHistory(
-    @Param('id')
-    id: string,
-  ) {
-    return this.chapterHistoryService.history(
-      id,
-    );
-  }
+@Get(':id/history')
+@UseGuards(WritingAuthGuard)
+async getHistory(
+  @Param('id')
+  id: string,
 
-  @Get(':id/history/latest')
-  getLatestHistory(
-    @Param('id')
-    id: string,
-  ) {
-    return this.chapterHistoryService.latest(
+  @Req()
+  request: any,
+) {
+  await this.authorization
+    .assertChapterOwner(
       id,
+      request.user.id,
     );
-  }
+
+  return this.chapterHistoryService.history(
+    id,
+  );
+}
+
+@Get(':id/history/latest')
+@UseGuards(WritingAuthGuard)
+async getLatestHistory(
+  @Param('id')
+  id: string,
+
+  @Req()
+  request: any,
+) {
+  await this.authorization
+    .assertChapterOwner(
+      id,
+      request.user.id,
+    );
+
+  return this.chapterHistoryService.latest(
+    id,
+  );
+}
 
   @Post('history/restore')
   restoreVersion(
