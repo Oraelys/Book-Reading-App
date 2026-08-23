@@ -1,5 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { SupabaseService } from '../database/supabase.service';
+import { SupabaseService } from '../modules/database/supabase.service';
 
 @Controller('test')
 export class TestController {
