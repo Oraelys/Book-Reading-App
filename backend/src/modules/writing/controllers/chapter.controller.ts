@@ -9,13 +9,8 @@ import {
   Query,
 } from '@nestjs/common';
 
-import {
-  ChapterService,
-} from '../services/chapter.service';
-
-import {
-  DraftService,
-} from '../services/draft.service';
+import { ChapterService } from '../services/chapter.service';
+import { DraftService } from '../services/draft.service';
 
 import {
   ChapterAutosaveService,
@@ -34,28 +29,16 @@ import {
 } from '../providers/chapter-lock.service';
 
 import {
-  SaveDraftDto,
-} from '../dto/save-draft.dto';
-
-import {
-  AutosaveDto,
-} from '../dto/autosave.dto';
-
-import {
-  RestoreVersionDto,
-} from '../dto/restore-version.dto';
-
-import {
-  ReorderChapterDto,
-} from '../dto/reorder-chapter.dto';
-
-import {
   ChapterPublishService,
 } from '../providers/chapter-publish.service';
 
 import {
   ChapterSearchService,
 } from '../providers/chapter-search.service';
+
+import { SaveDraftDto } from '../dto/save-draft.dto';
+import { AutosaveDto } from '../dto/autosave.dto';
+import { RestoreVersionDto } from '../dto/restore-version.dto';
 
 @Controller('chapters')
 export class ChapterController {
@@ -96,9 +79,7 @@ export class ChapterController {
     @Body()
     dto: any,
   ) {
-    return this.chapterService.create(
-      dto,
-    );
+    return this.chapterService.create(dto);
   }
 
   @Patch(':id')
@@ -126,8 +107,9 @@ export class ChapterController {
   }
 
   /*
-   * Keep this route after the more
-   * specific chapter routes.
+   * ==========================================
+   * Chapter lists / retrieval
+   * ==========================================
    */
 
   @Get('story/:storyId')
@@ -186,19 +168,9 @@ export class ChapterController {
 
   /*
    * ==========================================
-   * History
+   * Chapter history
    * ==========================================
    */
-
-  @Get(':id/history/latest')
-  getLatestHistory(
-    @Param('id')
-    id: string,
-  ) {
-    return this.chapterHistoryService.latest(
-      id,
-    );
-  }
 
   @Get(':id/history')
   getHistory(
@@ -206,6 +178,16 @@ export class ChapterController {
     id: string,
   ) {
     return this.chapterHistoryService.history(
+      id,
+    );
+  }
+
+  @Get(':id/history/latest')
+  getLatestHistory(
+    @Param('id')
+    id: string,
+  ) {
+    return this.chapterHistoryService.latest(
       id,
     );
   }
@@ -232,7 +214,7 @@ export class ChapterController {
 
   /*
    * ==========================================
-   * Chapter Ordering
+   * Chapter ordering
    * ==========================================
    */
 
@@ -242,12 +224,15 @@ export class ChapterController {
     chapterId: string,
 
     @Body()
-    dto: ReorderChapterDto,
+    body: {
+      novelId: string;
+      position: number;
+    },
   ) {
     return this.chapterOrderService.reorder(
-      dto.novelId,
+      body.novelId,
       chapterId,
-      dto.position,
+      body.position,
     );
   }
 
@@ -285,7 +270,7 @@ export class ChapterController {
 
   /*
    * ==========================================
-   * Chapter Editing Lock
+   * Chapter locking
    * ==========================================
    */
 
@@ -305,7 +290,7 @@ export class ChapterController {
     );
   }
 
-  @Delete(':id/lock')
+  @Post(':id/unlock')
   unlockChapter(
     @Param('id')
     chapterId: string,
@@ -322,7 +307,7 @@ export class ChapterController {
   }
 
   @Get(':id/lock')
-  getChapterLock(
+  getLockStatus(
     @Param('id')
     chapterId: string,
   ) {
@@ -331,65 +316,82 @@ export class ChapterController {
     );
   }
 
-
   /*
    * ==========================================
-   * Chapter Publishing
+   * Publishing
    * ==========================================
    */
 
+  @Post(':id/publish')
+  publishChapter(
+    @Param('id')
+    chapterId: string,
+
+    @Body()
+    body?: {
+      novelId?: string;
+    },
+  ) {
+    return this.chapterPublishService.publish(
+      chapterId,
+      body?.novelId,
+    );
+  }
+
+  @Post(':id/unpublish')
+  unpublishChapter(
+    @Param('id')
+    chapterId: string,
+
+    @Body()
+    body?: {
+      novelId?: string;
+    },
+  ) {
+    return this.chapterPublishService.unpublish(
+      chapterId,
+      body?.novelId,
+    );
+  }
+
+  @Get(':id/publish-status')
+  getPublishStatus(
+    @Param('id')
+    chapterId: string,
+  ) {
+    return this.chapterPublishService.status(
+      chapterId,
+    );
+  }
+
   /*
- * ==========================================
- * Chapter Publishing
- * ==========================================
- */
+   * ==========================================
+   * Search
+   * ==========================================
+   */
 
-@Post(':id/publish')
-publishChapter(
-  @Param('id')
-  chapterId: string,
-) {
-  return this.chapterPublishService.publish(
-    chapterId,
-  );
+  @Get('search/:novelId')
+  searchChapters(
+    @Param('novelId')
+    novelId: string,
+
+    @Query('q')
+    query: string,
+
+    @Query('limit')
+    limit?: string,
+  ) {
+    const parsedLimit =
+      limit
+        ? Number.parseInt(limit, 10)
+        : 20;
+
+    return this.chapterSearchService.search(
+      novelId,
+      query ?? '',
+      Number.isFinite(parsedLimit)
+        ? parsedLimit
+        : 20,
+    );
+  }
 }
-
-@Post(':id/unpublish')
-unpublishChapter(
-  @Param('id')
-  chapterId: string,
-) {
-  return this.chapterPublishService.unpublish(
-    chapterId,
-  );
-}
-
-@Get(':id/publish/status')
-getPublishStatus(
-  @Param('id')
-  chapterId: string,
-) {
-  return this.chapterPublishService.status(
-    chapterId,
-  );
-}
-
-
-@Get('story/:storyId/search')
-searchChapters(
-  @Param('storyId')
-  storyId: string,
-
-  @Query('q')
-  query = '',
-
-  @Query('limit')
-  limit = '20',
-) {
-  return this.chapterSearchService.search(
-    storyId,
-    query,
-    Number(limit),
-  );
-}
-} 
