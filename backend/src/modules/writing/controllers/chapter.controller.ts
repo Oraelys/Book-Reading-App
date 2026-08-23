@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 
 import {
@@ -52,6 +53,10 @@ import {
   ChapterPublishService,
 } from '../providers/chapter-publish.service';
 
+import {
+  ChapterSearchService,
+} from '../providers/chapter-search.service';
+
 @Controller('chapters')
 export class ChapterController {
   constructor(
@@ -75,6 +80,9 @@ export class ChapterController {
 
     private readonly chapterPublishService:
       ChapterPublishService,
+
+    private readonly chapterSearchService:
+      ChapterSearchService,
   ) {}
 
   /*
@@ -365,4 +373,23 @@ getPublishStatus(
     chapterId,
   );
 }
+
+
+@Get('story/:storyId/search')
+searchChapters(
+  @Param('storyId')
+  storyId: string,
+
+  @Query('q')
+  query = '',
+
+  @Query('limit')
+  limit = '20',
+) {
+  return this.chapterSearchService.search(
+    storyId,
+    query,
+    Number(limit),
+  );
 }
+} 
