@@ -1,10 +1,11 @@
 import {
-    Body,
-    Controller,
-    Get,
-    Param,
-    Patch,
-    Post,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
 } from '@nestjs/common';
 
 import { WritingService } from '../services/writing.service';
@@ -14,43 +15,61 @@ import { UpdateStoryDto } from '../dto/update-story.dto';
 
 @Controller('writing')
 export class WritingController {
+  constructor(
+    private readonly writingService:
+      WritingService,
+  ) {}
 
-    constructor(
-        private readonly writingService: WritingService,
-    ) {}
+  /*
+   * ==========================================
+   * Stories
+   * ==========================================
+   */
 
-    @Post('stories')
-    createStory(
-        @Body()
-        dto: CreateStoryDto,
-    ) {
-        return this.writingService.createStory(dto);
-    }
+  @Post('stories')
+  createStory(
+    @Body()
+    dto: CreateStoryDto,
+  ) {
+    return this.writingService.createStory(
+      dto,
+    );
+  }
 
-    @Patch('stories/:id')
-    updateStory(
-        @Param('id')
-        id: string,
+  @Get('stories')
+  getStories() {
+    return this.writingService.stories();
+  }
 
-        @Body()
-        dto: UpdateStoryDto,
-    ) {
-        return this.writingService.updateStory(
-            id,
-            dto,
-        );
-    }
+  @Get('stories/:id')
+  getStory(
+    @Param('id')
+    id: string,
+  ) {
+    return this.writingService.story(id);
+  }
 
-    @Get('stories/:id')
-    getStory(
-        @Param('id')
-        id: string,
-    ) {
-        return this.writingService.story(id);
-    }
+  @Patch('stories/:id')
+  updateStory(
+    @Param('id')
+    id: string,
 
-    @Get('stories')
-    getStories() {
-        return this.writingService.stories();
-    }
+    @Body()
+    dto: UpdateStoryDto,
+  ) {
+    return this.writingService.updateStory(
+      id,
+      dto,
+    );
+  }
+
+  @Delete('stories/:id')
+  deleteStory(
+    @Param('id')
+    id: string,
+  ) {
+    return this.writingService.deleteStory(
+      id,
+    );
+  }
 }
