@@ -7,6 +7,9 @@ import {
   Patch,
   Post,
   Query,
+  Req,
+  UseGuards,
+  NotFoundException,
 } from '@nestjs/common';
 
 import { ChapterService } from '../services/chapter.service';
@@ -36,10 +39,6 @@ import {
   ChapterSearchService,
 } from '../providers/chapter-search.service';
 
-import {
-  Req,
-  UseGuards,
-} from '@nestjs/common';
 
 import {
   WritingAuthGuard,
@@ -280,24 +279,24 @@ async getLatestHistory(
 }
 
   @Post('history/restore')
-  restoreVersion(
-    @Body()
-    dto: RestoreVersionDto,
-  ) {
-    return this.chapterHistoryService.restore(
-      dto.versionId,
-    );
-  }
+async restoreVersion(
+  @Body()
+  dto: RestoreVersionDto,
+) {
+  return this.chapterHistoryService.restore(
+    dto.versionId,
+  );
+}
 
-  @Delete('history/:id')
-  deleteHistory(
-    @Param('id')
-    id: string,
-  ) {
-    return this.chapterHistoryService.delete(
-      id,
-    );
-  }
+@Delete('history/:id')
+async deleteHistory(
+  @Param('id')
+  id: string,
+) {
+  return this.chapterHistoryService.delete(
+    id,
+  );
+}
 
   /*
    * ==========================================
@@ -306,54 +305,81 @@ async getLatestHistory(
    */
 
   @Post(':id/reorder')
-  reorderChapter(
-    @Param('id')
-    chapterId: string,
+@UseGuards(WritingAuthGuard)
+async reorderChapter(
+  @Param('id')
+  chapterId: string,
 
-    @Body()
-    body: {
-      novelId: string;
-      position: number;
-    },
-  ) {
-    return this.chapterOrderService.reorder(
-      body.novelId,
-      chapterId,
-      body.position,
-    );
-  }
+  @Body()
+  body: {
+    novelId: string;
+    position: number;
+  },
+
+  @Req()
+  request: any,
+) {
+  await this.authorization.assertChapterOwner(
+    chapterId,
+    request.user.id,
+  );
+
+  return this.chapterOrderService.reorder(
+    body.novelId,
+    chapterId,
+    body.position,
+  );
+}
 
   @Post(':id/move-up')
-  moveChapterUp(
-    @Param('id')
-    chapterId: string,
+@UseGuards(WritingAuthGuard)
+async moveChapterUp(
+  @Param('id')
+  chapterId: string,
 
-    @Body()
-    body: {
-      novelId: string;
-    },
-  ) {
-    return this.chapterOrderService.moveUp(
-      body.novelId,
-      chapterId,
-    );
-  }
+  @Body()
+  body: {
+    novelId: string;
+  },
+
+  @Req()
+  request: any,
+) {
+  await this.authorization.assertChapterOwner(
+    chapterId,
+    request.user.id,
+  );
+
+  return this.chapterOrderService.moveUp(
+    body.novelId,
+    chapterId,
+  );
+}
 
   @Post(':id/move-down')
-  moveChapterDown(
-    @Param('id')
-    chapterId: string,
+@UseGuards(WritingAuthGuard)
+async moveChapterDown(
+  @Param('id')
+  chapterId: string,
 
-    @Body()
-    body: {
-      novelId: string;
-    },
-  ) {
-    return this.chapterOrderService.moveDown(
-      body.novelId,
-      chapterId,
-    );
-  }
+  @Body()
+  body: {
+    novelId: string;
+  },
+
+  @Req()
+  request: any,
+) {
+  await this.authorization.assertChapterOwner(
+    chapterId,
+    request.user.id,
+  );
+
+  return this.chapterOrderService.moveDown(
+    body.novelId,
+    chapterId,
+  );
+}
 
   /*
    * ==========================================
@@ -362,36 +388,44 @@ async getLatestHistory(
    */
 
   @Post(':id/lock')
-  lockChapter(
-    @Param('id')
-    chapterId: string,
+@UseGuards(WritingAuthGuard)
+async lockChapter(
+  @Param('id')
+  chapterId: string,
 
-    @Body()
-    body: {
-      userId: string;
-    },
-  ) {
-    return this.chapterLockService.acquire(
-      chapterId,
-      body.userId,
-    );
-  }
+  @Req()
+  request: any,
+) {
+  await this.authorization.assertChapterOwner(
+    chapterId,
+    request.user.id,
+  );
+
+  return this.chapterLockService.acquire(
+    chapterId,
+    request.user.id,
+  );
+}
 
   @Post(':id/unlock')
-  unlockChapter(
-    @Param('id')
-    chapterId: string,
+@UseGuards(WritingAuthGuard)
+async unlockChapter(
+  @Param('id')
+  chapterId: string,
 
-    @Body()
-    body: {
-      userId: string;
-    },
-  ) {
-    return this.chapterLockService.release(
-      chapterId,
-      body.userId,
-    );
-  }
+  @Req()
+  request: any,
+) {
+  await this.authorization.assertChapterOwner(
+    chapterId,
+    request.user.id,
+  );
+
+  return this.chapterLockService.release(
+    chapterId,
+    request.user.id,
+  );
+}
 
   @Get(':id/lock')
   getLockStatus(
@@ -409,37 +443,55 @@ async getLatestHistory(
    * ==========================================
    */
 
-  @Post(':id/publish')
-  publishChapter(
-    @Param('id')
-    chapterId: string,
+@Post(':id/publish')
+@UseGuards(WritingAuthGuard)
+async publishChapter(
+  @Param('id')
+  chapterId: string,
 
-    @Body()
-    body?: {
-      novelId?: string;
-    },
-  ) {
-    return this.chapterPublishService.publish(
-      chapterId,
-      body?.novelId,
-    );
-  }
+  @Body()
+  body: {
+    novelId?: string;
+  },
 
-  @Post(':id/unpublish')
-  unpublishChapter(
-    @Param('id')
-    chapterId: string,
+  @Req()
+  request: any,
+) {
+  await this.authorization.assertChapterOwner(
+    chapterId,
+    request.user.id,
+  );
 
-    @Body()
-    body?: {
-      novelId?: string;
-    },
-  ) {
-    return this.chapterPublishService.unpublish(
-      chapterId,
-      body?.novelId,
-    );
-  }
+  return this.chapterPublishService.publish(
+    chapterId,
+    body?.novelId,
+  );
+}
+
+@Post(':id/unpublish')
+@UseGuards(WritingAuthGuard)
+async unpublishChapter(
+  @Param('id')
+  chapterId: string,
+
+  @Body()
+  body: {
+    novelId?: string;
+  },
+
+  @Req()
+  request: any,
+) {
+  await this.authorization.assertChapterOwner(
+    chapterId,
+    request.user.id,
+  );
+
+  return this.chapterPublishService.unpublish(
+    chapterId,
+    body?.novelId,
+  );
+}
 
   @Get(':id/publish-status')
   getPublishStatus(
