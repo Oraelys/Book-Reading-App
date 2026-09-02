@@ -1,18 +1,17 @@
-
 import { ScheduleModule } from '@nestjs/schedule';
 import { Module } from '@nestjs/common';
 
 import { ConfigModule } from '@nestjs/config';
+
 import { DatabaseModule } from './modules/database/database.module';
 import { TestModule } from './test/test.module';
 import { BooksModule } from './books/books.module';
 import { ProcessingModule } from './processing/processing.module';
-import { DraftsModule } from './modules/drafts/drafts.module';
-import { ChaptersModule } from './modules/chapters/chapters.module';
+
 import { NovelsModule } from './modules/novels/novels.module';
 import { PublishingModule } from './modules/publishing/publishing.module';
 import { MediaModule } from './modules/media/media.module';
-import {UploadsModule} from './modules/uploads/uploads.module';
+import { UploadsModule } from './modules/uploads/uploads.module';
 import { SeriesModule } from './modules/series/series.module';
 import { DiscoveryModule } from './modules/discovery/discovery.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
@@ -29,38 +28,70 @@ import { MlopsModule } from './modules/mlops/mlops.module';
 import { ContentModule } from './modules/content/content.module';
 import { WritingModule } from './modules/writing/writing.module';
 
-
-
 @Module({
   imports: [
     ScheduleModule.forRoot(),
+
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+
     DatabaseModule,
+
     TestModule,
+
     BooksModule,
+
     ProcessingModule,
-    DraftsModule,
-    ChaptersModule,
+
+    /*
+     * Canonical novel/story domain.
+     */
     NovelsModule,
+
+    /*
+     * Canonical publishing domain.
+     */
     PublishingModule,
+
     MediaModule,
+
     UploadsModule,
+
     SeriesModule,
+
     DiscoveryModule,
+
     ActivityModule,
+
     NotificationsModule,
+
     EventsModule,
+
     AnalyticsModule,
+
     RecommendationsModule,
+
     SearchModule,
+
     PreferencesModule,
+
     FeaturesModule,
+
     DatasetModule,
+
     AiModule,
+
     MlopsModule,
+
     ContentModule,
+
+    /*
+     * Canonical author writing domain.
+     *
+     * This replaces the old standalone drafts/
+     * and chapters/ implementations.
+     */
     WritingModule,
   ],
 })

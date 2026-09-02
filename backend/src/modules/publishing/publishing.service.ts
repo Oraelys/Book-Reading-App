@@ -5,148 +5,246 @@ import {
 } from '@nestjs/common';
 
 import { SupabaseService } from '../database/supabase.service';
-import { NovelsService } from '../novels/novels.service';
+import { ChapterPublishService } from '../writing/providers/chapter-publish.service';
 
 @Injectable()
 export class PublishingService {
   constructor(
     private readonly database: SupabaseService,
-    private readonly novelsService: NovelsService,
+    private readonly chapterPublishService:
+      ChapterPublishService,
   ) {}
 
   /**
    * Validate a story before publication.
    */
-  async validateStory(novelId: string) {
-    const supabase = this.database.getClient();
+  async validateStory(
+    novelId: string,
+  ) {
+    const supabase =
+      this.database.getClient();
 
-    const { data: novel, error: novelError } = await supabase
+    const {
+      data: novel,
+      error: novelError,
+    } = await supabase
       .from('novels')
       .select('*')
       .eq('id', novelId)
-      .single();
+      .maybeSingle();
 
-    if (novelError || !novel) {
-      throw new NotFoundException('Story not found.');
+    if (novelError) {
+      throw novelError;
     }
 
-    const { data: chapters, error: chapterError } = await supabase
+    if (!novel) {
+      throw new NotFoundException(
+        'Story not found.',
+      );
+    }
+
+    const {
+      data: chapters,
+      error: chapterError,
+    } = await supabase
       .from('chapters')
-      .select('*')
-      .eq('novel_id', novelId)
-      .order('chapter_number');
+      .select(
+        `
+        id,
+        title,
+        content,
+        chapter_number,
+        word_count,
+        status,
+        is_published
+        `,
+      )
+      .eq(
+        'novel_id',
+        novelId,
+      )
+      .order(
+        'chapter_number',
+        {
+          ascending: true,
+        },
+      );
 
     if (chapterError) {
       throw chapterError;
     }
 
-    const errors: { field: string; message: string }[] = [];
+    const errors: {
+      field: string;
+      message: string;
+    }[] = [];
 
-    // ---------- Story ----------
+    /*
+     * Story validation
+     */
+
     if (!novel.title?.trim()) {
       errors.push({
         field: 'title',
-        message: 'Story title is required.',
+        message:
+          'Story title is required.',
       });
     }
 
     if (!novel.description?.trim()) {
       errors.push({
         field: 'description',
-        message: 'Story description is required.',
+        message:
+          'Story description is required.',
       });
     }
 
     if (!novel.cover_image_url) {
       errors.push({
         field: 'cover',
-        message: 'Cover image is required.',
+        message:
+          'Cover image is required.',
       });
     }
 
     if (!novel.author_name?.trim()) {
       errors.push({
         field: 'author_name',
-        message: 'Author name is required.',
+        message:
+          'Author name is required.',
       });
     }
 
     if (!novel.category?.trim()) {
       errors.push({
         field: 'category',
-        message: 'Category is required.',
+        message:
+          'Category is required.',
       });
     }
 
-    // ---------- Chapters ----------
-    if (!chapters || chapters.length === 0) {
+    /*
+     * Chapter validation
+     */
+
+    if (
+      !chapters ||
+      chapters.length === 0
+    ) {
       errors.push({
         field: 'chapters',
-        message: 'At least one chapter must exist.',
+        message:
+          'At least one chapter must exist.',
       });
     } else {
-      const published = chapters.filter(
-        (chapter) => chapter.status === 'published',
-      );
+      const published =
+        chapters.filter(
+          (chapter) =>
+            chapter.status ===
+              'published' ||
+            chapter.is_published === true,
+        );
 
       if (published.length === 0) {
         errors.push({
           field: 'published',
-          message: 'Publish at least one chapter.',
+          message:
+            'Publish at least one chapter.',
         });
       }
 
-      // Duplicate chapter numbers
-      const numbers = chapters.map((c) => c.chapter_number);
-      const duplicates = numbers.filter(
-        (item, index) => numbers.indexOf(item) !== index,
-      );
+      const numbers =
+        chapters.map(
+          (chapter) =>
+            chapter.chapter_number,
+        );
 
-      if (duplicates.length > 0) {
+      const duplicates =
+        numbers.filter(
+          (number, index) =>
+            numbers.indexOf(
+              number,
+            ) !== index,
+        );
+
+      if (
+        duplicates.length > 0
+      ) {
         errors.push({
-          field: 'chapter_number',
-          message: 'Duplicate chapter numbers detected.',
+          field:
+            'chapter_number',
+          message:
+            'Duplicate chapter numbers detected.',
         });
       }
 
-      // Empty published chapters
-      published.forEach((chapter) => {
-        if (!chapter.content?.trim()) {
-          errors.push({
-            field: `chapter_${chapter.chapter_number}`,
-            message: `Published Chapter ${chapter.chapter_number} has no content.`,
-          });
-        }
-      });
+      published.forEach(
+        (chapter) => {
+          if (
+            !chapter.content?.trim()
+          ) {
+            errors.push({
+              field:
+                `chapter_${chapter.chapter_number}`,
+              message:
+                `Published Chapter ${chapter.chapter_number} has no content.`,
+            });
+          }
+        },
+      );
     }
 
     return {
-      canPublish: errors.length === 0,
+      canPublish:
+        errors.length === 0,
+
       errors,
     };
   }
 
   /**
    * Publish an entire story.
+   *
+   * Chapter publication itself is delegated
+   * to the canonical Writing domain.
    */
-  async publishStory(novelId: string) {
-    const validation = await this.validateStory(novelId);
+  async publishStory(
+    novelId: string,
+  ) {
+    const validation =
+      await this.validateStory(
+        novelId,
+      );
 
-    if (!validation.canPublish) {
-      throw new BadRequestException(validation);
+    if (
+      !validation.canPublish
+    ) {
+      throw new BadRequestException(
+        validation,
+      );
     }
 
-    const supabase = this.database.getClient();
+    const supabase =
+      this.database.getClient();
 
-    const { data: novel, error } = await supabase
+    const now =
+      new Date().toISOString();
+
+    const {
+      data: novel,
+      error,
+    } = await supabase
       .from('novels')
       .update({
         status: 'published',
         is_public: true,
-        published_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        published_at: now,
+        updated_at: now,
       })
-      .eq('id', novelId)
+      .eq(
+        'id',
+        novelId,
+      )
       .select()
       .single();
 
@@ -154,48 +252,42 @@ export class PublishingService {
       throw error;
     }
 
-    await this.logAdminEvent(
-      'story_published',
-      'Story Published',
-      `"${novel.title}" was published.`,
-    );
-
-    await this.createBackgroundJob(
-      'SEARCH_REINDEX',
-      novelId,
-    );
-
-    await this.createBackgroundJob(
-      'RECOMMENDATION_REFRESH',
-      novelId,
-    );
-
-    await this.createBackgroundJob(
-      'TRENDING_REFRESH',
-      novelId,
-    );
-
     return {
       success: true,
-      message: 'Story published successfully.',
+
+      message:
+        'Story published successfully.',
+
       novel,
     };
   }
 
   /**
-   * Unpublish story.
+   * Unpublish an entire story.
    */
-  async unpublishStory(novelId: string) {
-    const supabase = this.database.getClient();
+  async unpublishStory(
+    novelId: string,
+  ) {
+    const supabase =
+      this.database.getClient();
 
-    const { data: novel, error } = await supabase
+    const now =
+      new Date().toISOString();
+
+    const {
+      data: novel,
+      error,
+    } = await supabase
       .from('novels')
       .update({
         status: 'draft',
         is_public: false,
-        updated_at: new Date().toISOString(),
+        updated_at: now,
       })
-      .eq('id', novelId)
+      .eq(
+        'id',
+        novelId,
+      )
       .select()
       .single();
 
@@ -203,245 +295,128 @@ export class PublishingService {
       throw error;
     }
 
-    await this.logAdminEvent(
-      'story_unpublished',
-      'Story Unpublished',
-      `"${novel.title}" was unpublished.`,
-    );
-
     return {
       success: true,
-      message: 'Story unpublished.',
+
+      message:
+        'Story unpublished.',
+
       novel,
     };
   }
 
-  // Chapter publishing and unpublishing methods can be added here, similar to the story methods above.
+  /**
+   * Validate a chapter.
+   *
+   * Delegates actual chapter rules
+   * to the Writing domain.
+   */
+  async validateChapter(
+    chapterId: string,
+  ) {
+    const status =
+      await this.chapterPublishService
+        .status(
+          chapterId,
+        );
 
-  async validateChapter(chapterId: string) {
-  const supabase = this.database.getClient();
+    const supabase =
+      this.database.getClient();
 
-  const { data: chapter, error } = await supabase
-    .from('chapters')
-    .select('*')
-    .eq('id', chapterId)
-    .single();
-
-  if (error || !chapter) {
-    throw new NotFoundException('Chapter not found.');
-  }
-
-  const errors: { field: string; message: string }[] = [];
-
-  if (!chapter.title?.trim()) {
-    errors.push({
-      field: 'title',
-      message: 'Chapter title is required.',
-    });
-  }
-
-  if (!chapter.content?.trim()) {
-    errors.push({
-      field: 'content',
-      message: 'Chapter content is empty.',
-    });
-  }
-
-  if ((chapter.word_count ?? 0) < 50) {
-    errors.push({
-      field: 'word_count',
-      message: 'Chapter is too short.',
-    });
-  }
-
-  return {
-    canPublish: errors.length === 0,
-    errors,
-    chapter,
-  };
-}
-
-async publishChapter(chapterId: string) {
-
-  const validation =
-    await this.validateChapter(chapterId);
-
-  if (!validation.canPublish) {
-    throw new BadRequestException(validation);
-  }
-
-  const supabase = this.database.getClient();
-
-  const { data: chapter, error } =
-    await supabase
-      .from('chapters')
-      .update({
-        status: 'published',
-        published_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', chapterId)
-      .select()
-      .single();
-
-  if (error) throw error;
-
-  await this.updateNovelStatistics(
-    chapter.novel_id,
-  );
-
-  await this.logAdminEvent(
-    'chapter_published',
-    'Chapter Published',
-    `"${chapter.title}" published.`,
-  );
-
-  await this.createBackgroundJob(
-    'SEARCH_REINDEX',
-    chapter.novel_id,
-  );
-
-  return {
-    success: true,
-    chapter,
-  };
-}
-
-async unpublishChapter(
-  chapterId: string,
-) {
-
-  const supabase =
-    this.database.getClient();
-
-  const { data: chapter, error } =
-    await supabase
-      .from('chapters')
-      .update({
-        status: 'draft',
-        unpublished_at:
-          new Date().toISOString(),
-        updated_at:
-          new Date().toISOString(),
-      })
-      .eq('id', chapterId)
-      .select()
-      .single();
-
-  if (error) throw error;
-
-  await this.updateNovelStatistics(
-    chapter.novel_id,
-  );
-
-  await this.logAdminEvent(
-    'chapter_unpublished',
-    'Chapter Unpublished',
-    `"${chapter.title}" unpublished.`,
-  );
-
-  return {
-    success: true,
-    chapter,
-  };
-}
-
-private async updateNovelStatistics(
-  novelId: string,
-) {
-
-  const supabase =
-    this.database.getClient();
-
-  const { data: chapters } =
-    await supabase
+    const {
+      data: chapter,
+      error,
+    } = await supabase
       .from('chapters')
       .select(
-        'status, word_count, estimated_read_time',
+        `
+        id,
+        title,
+        content,
+        word_count,
+        status,
+        is_published
+        `,
       )
-      .eq('novel_id', novelId);
+      .eq(
+        'id',
+        chapterId,
+      )
+      .maybeSingle();
 
-  const published =
-    chapters?.filter(
-      c => c.status === 'published',
-    ) ?? [];
+    if (error) {
+      throw error;
+    }
 
-  const draft =
-    chapters?.filter(
-      c => c.status === 'draft',
-    ) ?? [];
+    if (!chapter) {
+      throw new NotFoundException(
+        'Chapter not found.',
+      );
+    }
 
-  const totalWords =
-    chapters?.reduce(
-      (sum, c) =>
-        sum + (c.word_count ?? 0),
-      0,
-    ) ?? 0;
+    const errors: {
+      field: string;
+      message: string;
+    }[] = [];
 
-  const readingTime =
-    chapters?.reduce(
-      (sum, c) =>
-        sum +
-        (c.estimated_read_time ?? 0),
-      0,
-    ) ?? 0;
+    if (!chapter.title?.trim()) {
+      errors.push({
+        field: 'title',
+        message:
+          'Chapter title is required.',
+      });
+    }
 
-  await supabase
-    .from('novels')
-    .update({
-      published_chapters:
-        published.length,
+    if (!chapter.content?.trim()) {
+      errors.push({
+        field: 'content',
+        message:
+          'Chapter content is empty.',
+      });
+    }
 
-      draft_chapters:
-        draft.length,
+    if (
+      (chapter.word_count ?? 0) <
+      50
+    ) {
+      errors.push({
+        field: 'word_count',
+        message:
+          'Chapter is too short.',
+      });
+    }
 
-      total_words:
-        totalWords,
+    return {
+      canPublish:
+        errors.length === 0,
 
-      reading_time:
-        readingTime,
+      errors,
 
-      updated_at:
-        new Date().toISOString(),
-    })
-    .eq('id', novelId);
-}
+      chapter,
 
-  /**
-   * Create background jobs.
-   */
-  private async createBackgroundJob(
-    jobType: string,
-    novelId: string,
-  ) {
-    const supabase = this.database.getClient();
-
-    await supabase.from('background_jobs').insert({
-      job_type: jobType,
-      novel_id: novelId,
-      status: 'pending',
-      progress: 0,
-      created_at: new Date().toISOString(),
-    });
+      status,
+    };
   }
 
   /**
-   * Log admin events.
+   * Delegate chapter publication
+   * to WritingModule.
    */
-  private async logAdminEvent(
-    eventType: string,
-    title: string,
-    message: string,
+  async publishChapter(
+    chapterId: string,
   ) {
-    const supabase = this.database.getClient();
-
-    await supabase.from('admin_events').insert({
-      event_type: eventType,
-      title,
-      message,
-      created_at: new Date().toISOString(),
-    });
+    return this.chapterPublishService
+      .publish(chapterId);
   }
 
-  
+  /**
+   * Delegate chapter unpublication
+   * to WritingModule.
+   */
+  async unpublishChapter(
+    chapterId: string,
+  ) {
+    return this.chapterPublishService
+      .unpublish(chapterId);
+  }
 }

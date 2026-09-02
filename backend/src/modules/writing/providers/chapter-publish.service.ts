@@ -26,9 +26,13 @@ export class ChapterPublishService {
     chapterId: string,
     novelId?: string,
   ) {
-    const client = this.database.getClient();
+    const client =
+      this.database.getClient();
 
-    const { data: chapter, error } = await client
+    const {
+      data: chapter,
+      error,
+    } = await client
       .from('chapters')
       .select(
         `
@@ -42,7 +46,10 @@ export class ChapterPublishService {
         status
         `,
       )
-      .eq('id', chapterId)
+      .eq(
+        'id',
+        chapterId,
+      )
       .maybeSingle();
 
     if (error) {
@@ -76,32 +83,46 @@ export class ChapterPublishService {
     }
 
     const stats =
-      this.metrics.calculate(content);
+      this.metrics.calculate(
+        content,
+      );
 
-    const now = new Date().toISOString();
+    const now =
+      new Date().toISOString();
 
-    const { data, error: updateError } =
-      await client
-        .from('chapters')
-        .update({
-          word_count: stats.wordCount,
+    const {
+      data,
+      error: updateError,
+    } = await client
+      .from('chapters')
+      .update({
+        word_count:
+          stats.wordCount,
 
-          estimated_read_time:
-            stats.estimatedReadingMinutes,
+        estimated_read_time:
+          stats.estimatedReadingMinutes,
 
-          is_published: true,
+        is_published:
+          true,
 
-          published_at: now,
+        published_at:
+          now,
 
-          status: 'published',
+        status:
+          'published',
 
-          last_saved_at: now,
+        last_saved_at:
+          now,
 
-          updated_at: now,
-        })
-        .eq('id', chapterId)
-        .select()
-        .single();
+        updated_at:
+          now,
+      })
+      .eq(
+        'id',
+        chapterId,
+      )
+      .select()
+      .single();
 
     if (updateError) {
       throw updateError;
@@ -120,20 +141,26 @@ export class ChapterPublishService {
     chapterId: string,
     novelId?: string,
   ) {
-    const client = this.database.getClient();
+    const client =
+      this.database.getClient();
 
-    const { data: chapter, error } =
-      await client
-        .from('chapters')
-        .select(
-          `
-          id,
-          novel_id,
-          is_published
-          `,
-        )
-        .eq('id', chapterId)
-        .maybeSingle();
+    const {
+      data: chapter,
+      error,
+    } = await client
+      .from('chapters')
+      .select(
+        `
+        id,
+        novel_id,
+        is_published
+        `,
+      )
+      .eq(
+        'id',
+        chapterId,
+      )
+      .maybeSingle();
 
     if (error) {
       throw error;
@@ -154,23 +181,33 @@ export class ChapterPublishService {
       );
     }
 
-    const now = new Date().toISOString();
+    const now =
+      new Date().toISOString();
 
-    const { data, error: updateError } =
-      await client
-        .from('chapters')
-        .update({
-          is_published: false,
+    const {
+      data,
+      error: updateError,
+    } = await client
+      .from('chapters')
+      .update({
+        is_published:
+          false,
 
-          unpublished_at: now,
+        unpublished_at:
+          now,
 
-          status: 'draft',
+        status:
+          'draft',
 
-          updated_at: now,
-        })
-        .eq('id', chapterId)
-        .select()
-        .single();
+        updated_at:
+          now,
+      })
+      .eq(
+        'id',
+        chapterId,
+      )
+      .select()
+      .single();
 
     if (updateError) {
       throw updateError;
@@ -183,29 +220,36 @@ export class ChapterPublishService {
   }
 
   /**
-   * Return publishing status.
+   * Return publishing status for
+   * a single chapter.
    */
   async status(
     chapterId: string,
   ) {
-    const client = this.database.getClient();
+    const client =
+      this.database.getClient();
 
-    const { data, error } =
-      await client
-        .from('chapters')
-        .select(
-          `
-          id,
-          novel_id,
-          title,
-          is_published,
-          published_at,
-          unpublished_at,
-          status
-          `,
-        )
-        .eq('id', chapterId)
-        .maybeSingle();
+    const {
+      data,
+      error,
+    } = await client
+      .from('chapters')
+      .select(
+        `
+        id,
+        novel_id,
+        title,
+        is_published,
+        published_at,
+        unpublished_at,
+        status
+        `,
+      )
+      .eq(
+        'id',
+        chapterId,
+      )
+      .maybeSingle();
 
     if (error) {
       throw error;
@@ -218,5 +262,180 @@ export class ChapterPublishService {
     }
 
     return data;
+  }
+
+  /**
+   * Publish every unpublished chapter
+   * belonging to a novel.
+   */
+  async publishAll(
+    novelId: string,
+  ) {
+    const client =
+      this.database.getClient();
+
+    const {
+      data: chapters,
+      error: findError,
+    } = await client
+      .from('chapters')
+      .select(
+        `
+        id,
+        novel_id,
+        content
+        `,
+      )
+      .eq(
+        'novel_id',
+        novelId,
+      )
+      .eq(
+        'is_published',
+        false,
+      );
+
+    if (findError) {
+      throw findError;
+    }
+
+    if (!chapters) {
+      return [];
+    }
+
+    const published: any[] = [];
+
+    for (const chapter of chapters) {
+      const result =
+        await this.publish(
+          chapter.id,
+          novelId,
+        );
+
+      published.push(
+        result.chapter,
+      );
+    }
+
+    return published;
+  }
+
+  /**
+   * Unpublish every published chapter
+   * belonging to a novel.
+   */
+  async unpublishAll(
+    novelId: string,
+  ) {
+    const client =
+      this.database.getClient();
+
+    const {
+      data: chapters,
+      error: findError,
+    } = await client
+      .from('chapters')
+      .select(
+        `
+        id,
+        novel_id
+        `,
+      )
+      .eq(
+        'novel_id',
+        novelId,
+      )
+      .eq(
+        'is_published',
+        true,
+      );
+
+    if (findError) {
+      throw findError;
+    }
+
+    if (!chapters) {
+      return [];
+    }
+
+    const unpublished: any[] = [];
+
+    for (const chapter of chapters) {
+      const result =
+        await this.unpublish(
+          chapter.id,
+          novelId,
+        );
+
+      unpublished.push(
+        result.chapter,
+      );
+    }
+
+    return unpublished;
+  }
+
+  /**
+   * Return publishing status for
+   * every chapter in a novel.
+   */
+  async getPublishingStatus(
+    novelId: string,
+  ) {
+    const client =
+      this.database.getClient();
+
+    const {
+      data,
+      error,
+    } = await client
+      .from('chapters')
+      .select(
+        `
+        id,
+        title,
+        chapter_number,
+        is_published,
+        published_at,
+        unpublished_at,
+        status
+        `,
+      )
+      .eq(
+        'novel_id',
+        novelId,
+      )
+      .order(
+        'chapter_number',
+        {
+          ascending: true,
+        },
+      );
+
+    if (error) {
+      throw error;
+    }
+
+    const chapters =
+      data ?? [];
+
+    return {
+      total:
+        chapters.length,
+
+      published:
+        chapters.filter(
+          (chapter) =>
+            chapter.is_published,
+        ).length,
+
+      unpublished:
+        chapters.filter(
+          (chapter) =>
+            !chapter.is_published,
+        ).length,
+
+      chapters,
+    };
   }
 }

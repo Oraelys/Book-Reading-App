@@ -11,12 +11,12 @@ import {
 } from './providers/content-storage.service';
 
 import {
-  ChapterPublishingService,
-} from './providers/chapter-publishing.service';
-
-import {
   ProcessingService,
 } from '../../processing/processing.service';
+
+import {
+  ChapterPublishService,
+} from '../writing/providers/chapter-publish.service';
 
 @Injectable()
 export class ContentService {
@@ -30,8 +30,8 @@ export class ContentService {
     private readonly processing:
       ProcessingService,
 
-    private readonly publishing:
-      ChapterPublishingService,
+    private readonly chapterPublishService:
+      ChapterPublishService,
   ) {}
 
   async upload(
@@ -108,13 +108,18 @@ export class ContentService {
    * ============================
    * PUBLISHING
    * ============================
+   *
+   * Publishing is delegated to
+   * WritingModule, which is now the
+   * canonical owner of chapter
+   * publication state.
    */
 
   async publishChapter(
     chapterId: string,
   ) {
-    return this.publishing
-      .publishChapter(
+    return this.chapterPublishService
+      .publish(
         chapterId,
       );
   }
@@ -122,8 +127,8 @@ export class ContentService {
   async unpublishChapter(
     chapterId: string,
   ) {
-    return this.publishing
-      .unpublishChapter(
+    return this.chapterPublishService
+      .unpublish(
         chapterId,
       );
   }
@@ -131,7 +136,7 @@ export class ContentService {
   async publishAll(
     novelId: string,
   ) {
-    return this.publishing
+    return this.chapterPublishService
       .publishAll(
         novelId,
       );
@@ -140,7 +145,7 @@ export class ContentService {
   async unpublishAll(
     novelId: string,
   ) {
-    return this.publishing
+    return this.chapterPublishService
       .unpublishAll(
         novelId,
       );
@@ -149,7 +154,7 @@ export class ContentService {
   async getPublishingStatus(
     novelId: string,
   ) {
-    return this.publishing
+    return this.chapterPublishService
       .getPublishingStatus(
         novelId,
       );

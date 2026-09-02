@@ -1,6 +1,5 @@
 import {
   Injectable,
-  NotFoundException,
 } from '@nestjs/common';
 
 import { DraftService } from '../services/draft.service';
@@ -16,17 +15,13 @@ export class ChapterAutosaveService {
     chapterId: string,
     content: string,
   ) {
-    const chapter =
-      await this.draftService.get(
-        chapterId,
-      );
-
-    if (!chapter) {
-      throw new NotFoundException(
-        'Chapter not found.',
-      );
-    }
-
+    /*
+     * chapterId refers to the chapters table,
+     * not story_drafts.
+     *
+     * Ownership is already enforced by
+     * ChapterController before this method runs.
+     */
     const saved =
       await this.draftService.save(
         chapterId,

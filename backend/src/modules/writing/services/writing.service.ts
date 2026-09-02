@@ -15,26 +15,33 @@ export class WritingService {
   ) {}
 
   /**
-   * Canonical writing-domain persistence.
+   * Create a story owned by the authenticated user.
    *
-   * Domain terminology:
-   *   Story
-   *
-   * Persistence terminology:
-   *   novels
+   * The owner is taken from the authenticated
+   * Supabase user rather than from client input.
    */
-  async createStory(dto: CreateStoryDto) {
-    const supabase = this.database.getClient();
+  async createStory(
+    dto: CreateStoryDto,
+    userId: string,
+  ) {
+    const supabase =
+      this.database.getClient();
 
-    const { data, error } = await supabase
+    const {
+      data,
+      error,
+    } = await supabase
       .from('novels')
       .insert({
         title: dto.title,
-        description: dto.description ?? null,
-        cover_image_url: dto.coverImage ?? null,
-        author_id: dto.authorId,
+        description:
+          dto.description ?? null,
+        cover_image_url:
+          dto.coverImage ?? null,
+        author_id: userId,
         category: dto.category,
-        is_public: dto.visibility === 'public',
+        is_public:
+          dto.visibility === 'public',
         status: 'draft',
       })
       .select()
@@ -51,26 +58,32 @@ export class WritingService {
     id: string,
     dto: UpdateStoryDto,
   ) {
-    const supabase = this.database.getClient();
+    const supabase =
+      this.database.getClient();
 
-    const updateData: Record<string, unknown> = {
+    const updateData:
+      Record<string, unknown> = {
       updated_at: new Date(),
     };
 
     if (dto.title !== undefined) {
-      updateData.title = dto.title;
+      updateData.title =
+        dto.title;
     }
 
     if (dto.description !== undefined) {
-      updateData.description = dto.description;
+      updateData.description =
+        dto.description;
     }
 
     if (dto.coverImage !== undefined) {
-      updateData.cover_image_url = dto.coverImage;
+      updateData.cover_image_url =
+        dto.coverImage;
     }
 
     if (dto.category !== undefined) {
-      updateData.category = dto.category;
+      updateData.category =
+        dto.category;
     }
 
     if (dto.visibility !== undefined) {
@@ -78,7 +91,10 @@ export class WritingService {
         dto.visibility === 'public';
     }
 
-    const { data, error } = await supabase
+    const {
+      data,
+      error,
+    } = await supabase
       .from('novels')
       .update(updateData)
       .eq('id', id)
@@ -93,9 +109,13 @@ export class WritingService {
   }
 
   async story(id: string) {
-    const supabase = this.database.getClient();
+    const supabase =
+      this.database.getClient();
 
-    const { data, error } = await supabase
+    const {
+      data,
+      error,
+    } = await supabase
       .from('novels')
       .select(`
         *,
@@ -114,14 +134,16 @@ export class WritingService {
   }
 
   async stories() {
-    const { data, error } =
-      await this.database
-        .getClient()
-        .from('novels')
-        .select('*')
-        .order('updated_at', {
-          ascending: false,
-        });
+    const {
+      data,
+      error,
+    } = await this.database
+      .getClient()
+      .from('novels')
+      .select('*')
+      .order('updated_at', {
+        ascending: false,
+      });
 
     if (error) {
       throw error;
@@ -130,13 +152,16 @@ export class WritingService {
     return data ?? [];
   }
 
-  async deleteStory(id: string) {
-    const { error } =
-      await this.database
-        .getClient()
-        .from('novels')
-        .delete()
-        .eq('id', id);
+  async deleteStory(
+    id: string,
+  ) {
+    const {
+      error,
+    } = await this.database
+      .getClient()
+      .from('novels')
+      .delete()
+      .eq('id', id);
 
     if (error) {
       throw error;

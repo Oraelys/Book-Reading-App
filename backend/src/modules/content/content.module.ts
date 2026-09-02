@@ -15,6 +15,10 @@ import {
 } from '../../processing/processing.module';
 
 import {
+  WritingModule,
+} from '../writing/writing.module';
+
+import {
   ContentController,
 } from './content.controller';
 
@@ -61,13 +65,13 @@ import {
 import {
   ChapterSplitterService,
 } from './providers/processing/chapter-splitter.service';
-import { ChapterPublishingService } from './providers/chapter-publishing.service';
 
 @Module({
   imports: [
     DatabaseModule,
     UploadsModule,
     ProcessingModule,
+    WritingModule,
   ],
 
   controllers: [
@@ -96,8 +100,6 @@ import { ChapterPublishingService } from './providers/chapter-publishing.service
     ChapterDetectorService,
 
     ChapterSplitterService,
-
-    ChapterPublishingService,
   ],
 
   exports: [

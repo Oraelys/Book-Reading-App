@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { DatabaseModule } from '../database/database.module';
+import { NovelsModule } from '../novels/novels.module';
 
 import { WritingController } from './controllers/writing.controller';
 import { ChapterController } from './controllers/chapter.controller';
@@ -25,6 +26,7 @@ import { WritingAuthorizationService } from './services/writing-authorization.se
 @Module({
   imports: [
     DatabaseModule,
+    NovelsModule, // <-- required
   ],
 
   controllers: [

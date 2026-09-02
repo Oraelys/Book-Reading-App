@@ -1,4 +1,6 @@
+
 import {
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -14,16 +16,24 @@ export class ChapterVersionService {
       SupabaseService,
   ) {}
 
+  /**
+   * Create a snapshot of a chapter.
+   *
+   * createdBy should normally be the authenticated
+   * user's id.
+   */
   async createSnapshot(
     chapterId: string,
     content: string,
     createdBy?: string,
   ) {
+    const supabase =
+      this.database.getClient();
+
     const {
       data: chapter,
       error: chapterError,
-    } = await this.database
-      .getClient()
+    } = await supabase
       .from('chapters')
       .select('id')
       .eq(
@@ -45,8 +55,7 @@ export class ChapterVersionService {
     const {
       data,
       error,
-    } = await this.database
-      .getClient()
+    } = await supabase
       .from('chapter_versions')
       .insert({
         chapter_id:
@@ -70,6 +79,9 @@ export class ChapterVersionService {
     return data;
   }
 
+  /**
+   * Return all versions belonging to a chapter.
+   */
   async versions(
     chapterId: string,
   ) {
@@ -98,6 +110,9 @@ export class ChapterVersionService {
     return data ?? [];
   }
 
+  /**
+   * Return the latest version.
+   */
   async latest(
     chapterId: string,
   ) {
@@ -128,6 +143,49 @@ export class ChapterVersionService {
     return data;
   }
 
+
+
+  /**
+   * Resolve a version by id.
+   */
+  async getVersion(
+    versionId: string,
+  ) {
+    const {
+      data,
+      error,
+    } = await this.database
+      .getClient()
+      .from('chapter_versions')
+      .select(
+        'id, chapter_id, content, created_by, created_at',
+      )
+      .eq(
+        'id',
+        versionId,
+      )
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      throw new NotFoundException(
+        'Version not found.',
+      );
+    }
+
+    return data;
+  }
+
+
+  /**
+   * Restore a version.
+   *
+   * Ownership must be checked by the caller before
+   * reaching this method.
+   */
   async restore(
     versionId: string,
   ) {
@@ -185,16 +243,51 @@ export class ChapterVersionService {
       throw error;
     }
 
+    if (!chapter) {
+      throw new NotFoundException(
+        'Chapter not found.',
+      );
+    }
+
     return chapter;
   }
 
+  /**
+   * Delete a version.
+   *
+   * Ownership must be checked by the caller.
+   */
   async delete(
     versionId: string,
   ) {
+    const supabase =
+      this.database.getClient();
+
+    const {
+      data: version,
+      error: versionError,
+    } = await supabase
+      .from('chapter_versions')
+      .select('id')
+      .eq(
+        'id',
+        versionId,
+      )
+      .maybeSingle();
+
+    if (versionError) {
+      throw versionError;
+    }
+
+    if (!version) {
+      throw new NotFoundException(
+        'Version not found.',
+      );
+    }
+
     const {
       error,
-    } = await this.database
-      .getClient()
+    } = await supabase
       .from('chapter_versions')
       .delete()
       .eq(
@@ -212,6 +305,11 @@ export class ChapterVersionService {
     };
   }
 
+  /**
+   * Delete every version belonging to a chapter.
+   *
+   * Ownership must be checked by the caller.
+   */
   async clear(
     chapterId: string,
   ) {
@@ -236,3 +334,4 @@ export class ChapterVersionService {
     };
   }
 }
+

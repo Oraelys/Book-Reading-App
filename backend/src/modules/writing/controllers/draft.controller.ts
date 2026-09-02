@@ -6,17 +6,23 @@ import {
   Param,
   Patch,
   Post,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 
-import {
-  DraftService,
-} from '../services/draft.service';
+import { DraftService } from '../services/draft.service';
+import { WritingAuthGuard } from '../guards/writing-auth.guard';
+import { WritingAuthorizationService } from '../services/writing-authorization.service';
 
 @Controller('writing/drafts')
+@UseGuards(WritingAuthGuard)
 export class DraftController {
   constructor(
     private readonly drafts:
       DraftService,
+
+    private readonly authorization:
+      WritingAuthorizationService,
   ) {}
 
   @Post()
@@ -26,7 +32,16 @@ export class DraftController {
       novelId: string;
       title?: string;
     },
+
+    @Req()
+    request: any,
   ) {
+    await this.authorization
+      .assertNovelOwner(
+        body.novelId,
+        request.user.id,
+      );
+
     return this.drafts.create(
       body.novelId,
       body.title,
@@ -37,19 +52,35 @@ export class DraftController {
   async get(
     @Param('draftId')
     draftId: string,
+
+    @Req()
+    request: any,
   ) {
+    await this.authorization
+      .assertDraftOwner(
+        draftId,
+        request.user.id,
+      );
+
     return this.drafts.get(
       draftId,
     );
   }
 
-  @Get(
-    'novel/:novelId',
-  )
+  @Get('novel/:novelId')
   async getNovelDrafts(
     @Param('novelId')
     novelId: string,
+
+    @Req()
+    request: any,
   ) {
+    await this.authorization
+      .assertNovelOwner(
+        novelId,
+        request.user.id,
+      );
+
     return this.drafts
       .getNovelDrafts(
         novelId,
@@ -65,16 +96,23 @@ export class DraftController {
     body: {
       content: string;
     },
+
+    @Req()
+    request: any,
   ) {
+    await this.authorization
+      .assertDraftOwner(
+        draftId,
+        request.user.id,
+      );
+
     return this.drafts.save(
       draftId,
       body.content,
     );
   }
 
-  @Patch(
-    ':draftId/title',
-  )
+  @Patch(':draftId/title')
   async updateTitle(
     @Param('draftId')
     draftId: string,
@@ -83,21 +121,36 @@ export class DraftController {
     body: {
       title: string;
     },
+
+    @Req()
+    request: any,
   ) {
-    return this.drafts
-      .updateTitle(
+    await this.authorization
+      .assertDraftOwner(
         draftId,
-        body.title,
+        request.user.id,
       );
+
+    return this.drafts.updateTitle(
+      draftId,
+      body.title,
+    );
   }
 
-  @Post(
-    ':draftId/submit',
-  )
+  @Post(':draftId/submit')
   async submit(
     @Param('draftId')
     draftId: string,
+
+    @Req()
+    request: any,
   ) {
+    await this.authorization
+      .assertDraftOwner(
+        draftId,
+        request.user.id,
+      );
+
     return this.drafts.submit(
       draftId,
     );
@@ -107,7 +160,16 @@ export class DraftController {
   async delete(
     @Param('draftId')
     draftId: string,
+
+    @Req()
+    request: any,
   ) {
+    await this.authorization
+      .assertDraftOwner(
+        draftId,
+        request.user.id,
+      );
+
     return this.drafts.delete(
       draftId,
     );
