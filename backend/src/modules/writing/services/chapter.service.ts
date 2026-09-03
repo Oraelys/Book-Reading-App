@@ -278,58 +278,108 @@ export class ChapterService {
     };
   }
 
+  /**
+   * Reader endpoint.
+   *
+   * A chapter is publicly readable only when:
+   * 1. The chapter exists.
+   * 2. The chapter is published.
+   * 3. Its parent novel is published.
+   */
   async chapter(
-  id: string,
-) {
-  const {
-    data,
-    error,
-  } = await this.database
-    .getClient()
-    .from('chapters')
-    .select('*')
-    .eq('id', id)
-    .eq('is_published', true)
-    .maybeSingle();
+    id: string,
+  ) {
+    const supabase =
+      this.database.getClient();
 
-  if (error) {
-    throw error;
-  }
+    const {
+      data: chapterReference,
+      error: chapterReferenceError,
+    } = await supabase
+      .from('chapters')
+      .select('novel_id')
+      .eq('id', id)
+      .eq('is_published', true)
+      .maybeSingle();
 
-  if (!data) {
-    throw new NotFoundException(
-      `Chapter ${id} not found.`,
+    if (chapterReferenceError) {
+      throw chapterReferenceError;
+    }
+
+    if (!chapterReference) {
+      throw new NotFoundException(
+        `Chapter ${id} not found.`,
+      );
+    }
+
+    // This verifies that the parent novel is
+    // itself publicly published.
+    await this.novelsService.findPublishedOne(
+      chapterReference.novel_id,
     );
+
+    const {
+      data,
+      error,
+    } = await supabase
+      .from('chapters')
+      .select('*')
+      .eq('id', id)
+      .eq('is_published', true)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      throw new NotFoundException(
+        `Chapter ${id} not found.`,
+      );
+    }
+
+    return data;
   }
 
-  return data;
-}
-
+  /**
+   * Reader endpoint.
+   *
+   * Only chapters belonging to a published novel
+   * and marked as published are returned.
+   */
   async chapters(
-  novelId: string,
-) {
-  const {
-    data,
-    error,
-  } = await this.database
-    .getClient()
-    .from('chapters')
-    .select('*')
-    .eq('novel_id', novelId)
-    .eq('is_published', true)
-    .order(
-      'chapter_number',
-      {
-        ascending: true,
-      },
+    novelId: string,
+  ) {
+    const supabase =
+      this.database.getClient();
+
+    // This prevents chapter enumeration against
+    // an unpublished/draft novel.
+    await this.novelsService.findPublishedOne(
+      novelId,
     );
 
-  if (error) {
-    throw error;
-  }
+    const {
+      data,
+      error,
+    } = await supabase
+      .from('chapters')
+      .select('*')
+      .eq('novel_id', novelId)
+      .eq('is_published', true)
+      .order(
+        'chapter_number',
+        {
+          ascending: true,
+        },
+      );
 
-  return data ?? [];
-}
+    if (error) {
+      throw error;
+    }
+
+    return data ?? [];
+  }
 
   private countWords(
     content: string,
