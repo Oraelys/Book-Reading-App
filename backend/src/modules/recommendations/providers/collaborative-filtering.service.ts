@@ -5,13 +5,10 @@ import { UserSimilarityService } from './user-similarity.service';
 
 @Injectable()
 export class CollaborativeFilteringService {
-
   constructor(
-
     private readonly database: SupabaseService,
 
     private readonly similarity: UserSimilarityService,
-
   ) {}
 
   /*
@@ -24,7 +21,6 @@ export class CollaborativeFilteringService {
     userId: string,
     embedding: number[],
   ) {
-
     const supabase =
       this.database.getClient();
 
@@ -41,10 +37,10 @@ export class CollaborativeFilteringService {
 
     return (data ?? [])
       .filter(
-        user => user.user_id !== userId,
+        user =>
+          user.user_id !== userId,
       )
       .map(user => ({
-
         userId: user.user_id,
 
         score:
@@ -52,13 +48,11 @@ export class CollaborativeFilteringService {
             embedding,
             user.embedding,
           ),
-
       }))
       .sort(
         (a, b) =>
           b.score - a.score,
       );
-
   }
 
   /*
@@ -70,12 +64,12 @@ export class CollaborativeFilteringService {
   async recommendations(
     similarUsers: any[],
   ) {
-
     const ids =
       similarUsers
         .slice(0, 25)
         .map(
-          user => user.userId,
+          user =>
+            user.userId,
         );
 
     if (!ids.length) {
@@ -90,11 +84,15 @@ export class CollaborativeFilteringService {
       .from('reading_progress')
       .select(`
           *,
-          novels(*)
+          novels!inner(*)
       `)
       .in(
         'user_id',
         ids,
+      )
+      .eq(
+        'novels.status',
+        'published',
       )
       .gte(
         'progress_percentage',
@@ -106,7 +104,5 @@ export class CollaborativeFilteringService {
     }
 
     return data ?? [];
-
   }
-
 }

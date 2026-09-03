@@ -11,7 +11,7 @@ import { CollaborativeFilteringService } from './providers/collaborative-filteri
 
 @Injectable()
 export class RecommendationsService {
-constructor(
+  constructor(
     private readonly database: SupabaseService,
     private readonly profileService: RecommendationProfileService,
 
@@ -22,14 +22,13 @@ constructor(
     private readonly collaborative: CollaborativeFilteringService,
 
     private readonly embeddings: EmbeddingService,
-) {}
+  ) {}
 
   /*
    * =====================================
    * Personalized Home Feed
    * =====================================
    */
-  
 
   async home(
     userId: string,
@@ -106,7 +105,7 @@ constructor(
       throw error;
     }
 
-    return data;
+    return data ?? [];
   }
 
   /*
@@ -131,7 +130,7 @@ constructor(
       throw error;
     }
 
-    return data;
+    return data ?? [];
   }
 
   /*
@@ -149,9 +148,10 @@ constructor(
         .from('reading_progress')
         .select(`
             *,
-            novels(*)
+            novels!inner(*)
         `)
         .eq('user_id', userId)
+        .eq('novels.status', 'published')
         .lt(
           'progress_percentage',
           100,
@@ -164,7 +164,7 @@ constructor(
       throw error;
     }
 
-    return data;
+    return data ?? [];
   }
 
   /*
@@ -187,6 +187,7 @@ constructor(
       .from('novels')
       .select('*')
       .eq('id', novelId)
+      .eq('status', 'published')
       .single();
 
     if (error) {
@@ -208,7 +209,7 @@ constructor(
       throw similarError;
     }
 
-    return data;
+    return data ?? [];
   }
 
   /*
@@ -232,7 +233,7 @@ constructor(
       throw error;
     }
 
-    return data;
+    return data ?? [];
   }
 
   /*
@@ -256,7 +257,7 @@ constructor(
       throw error;
     }
 
-    return data;
+    return data ?? [];
   }
 
   /*
@@ -274,16 +275,17 @@ constructor(
         .from('series_stories')
         .select(`
             story_order,
-            novels(*)
+            novels!inner(*)
         `)
         .eq('series_id', seriesId)
+        .eq('novels.status', 'published')
         .order('story_order');
 
     if (error) {
       throw error;
     }
 
-    return data;
+    return data ?? [];
   }
 
   /*
@@ -296,21 +298,22 @@ constructor(
     userId: string,
     novelId: string,
   ) {
-    const profile =
-      await this.profileService.build(
-        userId,
-      );
+    await this.profileService.build(
+      userId,
+    );
 
     const {
       data: novel,
+      error,
     } = await this.database
       .getClient()
       .from('novels')
       .select('*')
       .eq('id', novelId)
+      .eq('status', 'published')
       .single();
 
-    if (!novel) {
+    if (error || !novel) {
       return [];
     }
 
@@ -320,28 +323,32 @@ constructor(
   }
 
   /*
- * =====================================
- * Collaborative Recommendations
- * =====================================
- */
+   * =====================================
+   * Collaborative Recommendations
+   * =====================================
+   */
 
-async collaborativeRecommendations(
+  async collaborativeRecommendations(
     userId: string,
-) {
+  ) {
     const profile =
-        await this.profileService.build(userId);
+      await this.profileService.build(
+        userId,
+      );
 
     const embedding =
-        this.embeddings.buildUserEmbedding(profile);
+      this.embeddings.buildUserEmbedding(
+        profile,
+      );
 
     const users =
-        await this.collaborative.similarUsers(
-            userId,
-            embedding,
-        );
+      await this.collaborative.similarUsers(
+        userId,
+        embedding,
+      );
 
-    return this.collaborative.recommendations(users);
-}
-  
-  
+    return this.collaborative.recommendations(
+      users,
+    );
+  }
 }

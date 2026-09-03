@@ -6,7 +6,6 @@ import { RecommendationProfile } from './interfaces/user-profile.interface';
 
 @Injectable()
 export class RecommendationProfileService {
-
   constructor(
     private readonly database: SupabaseService,
   ) {}
@@ -14,11 +13,14 @@ export class RecommendationProfileService {
   async build(
     userId: string,
   ): Promise<RecommendationProfile> {
-
-    const supabase = this.database.getClient();
+    const supabase =
+      this.database.getClient();
 
     /*
      * Reading History
+     *
+     * Only published novels are allowed
+     * to influence the recommendation profile.
      */
 
     const { data: reading } =
@@ -26,12 +28,13 @@ export class RecommendationProfileService {
         .from('reading_progress')
         .select(`
           novel_id,
-          novels(
+          novels!inner(
             category,
             author_id
           )
         `)
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('novels.status', 'published');
 
     /*
      * Followed Stories
@@ -52,30 +55,45 @@ export class RecommendationProfileService {
     const excluded =
       new Set<string>();
 
-    reading?.forEach((item: any) => {
+    /*
+     * Only published reading history
+     * reaches this loop.
+     */
 
-      excluded.add(item.novel_id);
+    reading?.forEach((item: any) => {
+      if (item.novel_id) {
+        excluded.add(
+          item.novel_id,
+        );
+      }
 
       if (item.novels?.category) {
-
         categories.add(
           item.novels.category,
         );
-
       }
 
       if (item.novels?.author_id) {
-
         authors.add(
           item.novels.author_id,
         );
-
       }
+    });
 
+    /*
+     * Followed novels should also be
+     * excluded from recommendations.
+     */
+
+    follows?.forEach((item: any) => {
+      if (item.novel_id) {
+        excluded.add(
+          item.novel_id,
+        );
+      }
     });
 
     return {
-
       userId,
 
       favoriteCategories:
@@ -90,9 +108,6 @@ export class RecommendationProfileService {
 
       excludedNovels:
         [...excluded],
-
     };
-
   }
-
 }
