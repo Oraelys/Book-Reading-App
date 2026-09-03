@@ -43,9 +43,14 @@ export class WritingController {
   }
 
   @Get('stories')
-  getStories() {
-    return this.writingService.stories();
-  }
+getStories(
+  @Req()
+  request: any,
+) {
+  return this.writingService.stories(
+    request.user.id,
+  );
+}
 
   @Get('stories/:id')
   async getStory(

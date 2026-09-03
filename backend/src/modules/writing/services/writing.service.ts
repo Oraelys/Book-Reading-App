@@ -1,3 +1,4 @@
+
 import {
   Injectable,
   NotFoundException,
@@ -17,8 +18,8 @@ export class WritingService {
   /**
    * Create a story owned by the authenticated user.
    *
-   * The owner is taken from the authenticated
-   * Supabase user rather than from client input.
+   * Ownership is derived from authentication rather
+   * than accepted from client input.
    */
   async createStory(
     dto: CreateStoryDto,
@@ -67,8 +68,7 @@ export class WritingService {
     };
 
     if (dto.title !== undefined) {
-      updateData.title =
-        dto.title;
+      updateData.title = dto.title;
     }
 
     if (dto.description !== undefined) {
@@ -133,7 +133,11 @@ export class WritingService {
     return data;
   }
 
-  async stories() {
+  /**
+   * Return only stories belonging to the
+   * authenticated author.
+   */
+  async stories(userId: string) {
     const {
       data,
       error,
@@ -141,6 +145,7 @@ export class WritingService {
       .getClient()
       .from('novels')
       .select('*')
+      .eq('author_id', userId)
       .order('updated_at', {
         ascending: false,
       });
@@ -172,3 +177,4 @@ export class WritingService {
     };
   }
 }
+
