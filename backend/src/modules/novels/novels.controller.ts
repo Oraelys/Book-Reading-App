@@ -16,25 +16,23 @@ export class NovelsController {
   /**
    * Public compatibility endpoint.
    *
-   * Author mutations belong to the canonical
-   * /writing/stories API.
+   * Only published novels are returned.
    */
   @Get()
   findAll() {
-    return this.novels.findAll();
+    return this.novels.findPublished();
   }
 
   /**
    * Public compatibility endpoint.
    *
-   * Only published novels should be exposed
-   * through this public route.
+   * Only published novels are returned.
    */
   @Get(':id')
   findOne(
     @Param('id') id: string,
   ) {
-    return this.novels.findOne(id);
+    return this.novels.findPublishedOne(id);
   }
 }
 

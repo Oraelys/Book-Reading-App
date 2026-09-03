@@ -35,12 +35,11 @@ export class NovelsService {
   }
 
   /**
-   * Public/read-only novel listing.
+   * Public/read-only listing.
    *
-   * Draft and private novels must never be exposed
-   * through the public /novels endpoint.
+   * Only published novels are exposed.
    */
-  async findAll() {
+  async findPublished() {
     const { data, error } =
       await this.database
         .getClient()
@@ -59,10 +58,36 @@ export class NovelsService {
   }
 
   /**
-   * Public/read-only novel retrieval.
+   * Public/read-only retrieval.
    *
-   * Only published novels are available through
-   * the public /novels/:id endpoint.
+   * Only published novels are exposed.
+   */
+  async findPublishedOne(id: string) {
+    const { data, error } =
+      await this.database
+        .getClient()
+        .from('novels')
+        .select('*')
+        .eq('id', id)
+        .eq('status', 'published')
+        .single();
+
+    if (error || !data) {
+      throw new NotFoundException(
+        'Novel not found.',
+      );
+    }
+
+    return data;
+  }
+
+  /**
+   * Internal novel lookup.
+   *
+   * This intentionally includes draft novels.
+   *
+   * Internal services such as SeriesService may need
+   * to work with a novel before it is published.
    */
   async findOne(id: string) {
     const { data, error } =
@@ -71,7 +96,6 @@ export class NovelsService {
         .from('novels')
         .select('*')
         .eq('id', id)
-        .eq('status', 'published')
         .single();
 
     if (error || !data) {

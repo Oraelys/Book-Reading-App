@@ -1,3 +1,4 @@
+
 import {
   Injectable,
 } from '@nestjs/common';
@@ -21,21 +22,31 @@ export class DiscoveryService {
 
   async search(dto: SearchDto) {
 
-    const supabase = this.database.getClient();
+    const supabase =
+      this.database.getClient();
 
-    const limit = dto.limit ?? 20;
+    const limit =
+      dto.limit ?? 20;
 
-    const page = dto.page ?? 1;
+    const page =
+      dto.page ?? 1;
 
-    const from = (page - 1) * limit;
+    const from =
+      (page - 1) * limit;
 
-    const to = from + limit - 1;
+    const to =
+      from + limit - 1;
 
     let query = supabase
       .from('novels')
       .select(`
         *,
-        profiles(id,username,display_name,avatar_url)
+        profiles(
+          id,
+          username,
+          display_name,
+          avatar_url
+        )
       `)
       .eq('status', 'published');
 
@@ -54,23 +65,28 @@ export class DiscoveryService {
 
     if (dto.authorId) {
       query = query.eq(
-        'created_by',
+        'author_id',
         dto.authorId,
       );
     }
 
-    const { data, error } = await query
+    const {
+      data,
+      error,
+    } = await query
       .range(from, to)
       .order('popularity_score', {
         ascending: false,
       });
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
     return {
       page,
       limit,
-      results: data,
+      results: data ?? [],
     };
   }
 
@@ -82,18 +98,22 @@ export class DiscoveryService {
 
   async featured() {
 
-    const { data, error } =
-      await this.database
-        .getClient()
-        .from('novels')
-        .select('*')
-        .eq('status', 'published')
-        .eq('is_featured', true)
-        .limit(20);
+    const {
+      data,
+      error,
+    } = await this.database
+      .getClient()
+      .from('novels')
+      .select('*')
+      .eq('status', 'published')
+      .eq('is_featured', true)
+      .limit(20);
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
-    return data;
+    return data ?? [];
   }
 
   /*
@@ -104,20 +124,24 @@ export class DiscoveryService {
 
   async trending() {
 
-    const { data, error } =
-      await this.database
-        .getClient()
-        .from('novels')
-        .select('*')
-        .eq('status', 'published')
-        .order('trending_score', {
-          ascending: false,
-        })
-        .limit(20);
+    const {
+      data,
+      error,
+    } = await this.database
+      .getClient()
+      .from('novels')
+      .select('*')
+      .eq('status', 'published')
+      .order('trending_score', {
+        ascending: false,
+      })
+      .limit(20);
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
-    return data;
+    return data ?? [];
   }
 
   /*
@@ -128,20 +152,24 @@ export class DiscoveryService {
 
   async newReleases() {
 
-    const { data, error } =
-      await this.database
-        .getClient()
-        .from('novels')
-        .select('*')
-        .eq('status', 'published')
-        .order('published_at', {
-          ascending: false,
-        })
-        .limit(20);
+    const {
+      data,
+      error,
+    } = await this.database
+      .getClient()
+      .from('novels')
+      .select('*')
+      .eq('status', 'published')
+      .order('published_at', {
+        ascending: false,
+      })
+      .limit(20);
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
-    return data;
+    return data ?? [];
   }
 
   /*
@@ -152,20 +180,24 @@ export class DiscoveryService {
 
   async recentlyUpdated() {
 
-    const { data, error } =
-      await this.database
-        .getClient()
-        .from('novels')
-        .select('*')
-        .eq('status', 'published')
-        .order('last_activity', {
-          ascending: false,
-        })
-        .limit(20);
+    const {
+      data,
+      error,
+    } = await this.database
+      .getClient()
+      .from('novels')
+      .select('*')
+      .eq('status', 'published')
+      .order('last_activity', {
+        ascending: false,
+      })
+      .limit(20);
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
-    return data;
+    return data ?? [];
   }
 
   /*
@@ -174,22 +206,28 @@ export class DiscoveryService {
    * ======================================
    */
 
-  async byCategory(category: string) {
+  async byCategory(
+    category: string,
+  ) {
 
-    const { data, error } =
-      await this.database
-        .getClient()
-        .from('novels')
-        .select('*')
-        .eq('status', 'published')
-        .eq('category', category)
-        .order('popularity_score', {
-          ascending: false,
-        });
+    const {
+      data,
+      error,
+    } = await this.database
+      .getClient()
+      .from('novels')
+      .select('*')
+      .eq('status', 'published')
+      .eq('category', category)
+      .order('popularity_score', {
+        ascending: false,
+      });
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
-    return data;
+    return data ?? [];
   }
 
   /*
@@ -198,19 +236,28 @@ export class DiscoveryService {
    * ======================================
    */
 
-  async byAuthor(authorId: string) {
+  async byAuthor(
+    authorId: string,
+  ) {
 
-    const { data, error } =
-      await this.database
-        .getClient()
-        .from('novels')
-        .select('*')
-        .eq('status', 'published')
-        .eq('created_by', authorId);
+    const {
+      data,
+      error,
+    } = await this.database
+      .getClient()
+      .from('novels')
+      .select('*')
+      .eq('status', 'published')
+      .eq('author_id', authorId)
+      .order('popularity_score', {
+        ascending: false,
+      });
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
-    return data;
+    return data ?? [];
   }
 
   /*
@@ -219,23 +266,31 @@ export class DiscoveryService {
    * ======================================
    */
 
-  async continueReading(userId: string) {
+  async continueReading(
+    userId: string,
+  ) {
 
-    const { data, error } =
-      await this.database
-        .getClient()
-        .from('reading_progress')
-        .select(`
-          *,
-          novels(*)
-        `)
-        .eq('user_id', userId)
-        .order('last_read', {
-          ascending: false,
-        });
+    const {
+      data,
+      error,
+    } = await this.database
+      .getClient()
+      .from('reading_progress')
+      .select(`
+        *,
+        novels!inner(*)
+      `)
+      .eq('user_id', userId)
+      .eq('novels.status', 'published')
+      .order('last_read', {
+        ascending: false,
+      });
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
-    return data;
+    return data ?? [];
   }
 }
+
