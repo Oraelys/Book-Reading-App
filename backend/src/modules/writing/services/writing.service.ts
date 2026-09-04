@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NotFoundException,
@@ -20,6 +19,9 @@ export class WritingService {
    *
    * Ownership is derived from authentication rather
    * than accepted from client input.
+   *
+   * The database uses novels.created_by as the
+   * canonical ownership column.
    */
   async createStory(
     dto: CreateStoryDto,
@@ -39,7 +41,7 @@ export class WritingService {
           dto.description ?? null,
         cover_image_url:
           dto.coverImage ?? null,
-        author_id: userId,
+        created_by: userId,
         category: dto.category,
         is_public:
           dto.visibility === 'public',
@@ -145,7 +147,7 @@ export class WritingService {
       .getClient()
       .from('novels')
       .select('*')
-      .eq('author_id', userId)
+      .eq('created_by', userId)
       .order('updated_at', {
         ascending: false,
       });
@@ -177,4 +179,3 @@ export class WritingService {
     };
   }
 }
-

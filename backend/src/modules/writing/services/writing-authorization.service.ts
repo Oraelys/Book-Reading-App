@@ -13,9 +13,11 @@ export class WritingAuthorizationService {
   ) {}
 
   /**
-   * The writing domain uses novels.author_id as the
-   * canonical owner of a story. The authenticated
-   * Supabase user's id must match this value.
+   * The database uses novels.created_by as the
+   * canonical owner of a story.
+   *
+   * The authenticated Supabase user's id must
+   * match this value.
    */
   async assertNovelOwner(
     novelId: string,
@@ -27,7 +29,7 @@ export class WritingAuthorizationService {
     } = await this.database
       .getClient()
       .from('novels')
-      .select('id, author_id')
+      .select('id, created_by')
       .eq('id', novelId)
       .maybeSingle();
 
@@ -41,7 +43,7 @@ export class WritingAuthorizationService {
       );
     }
 
-    if (novel.author_id !== userId) {
+    if (novel.created_by !== userId) {
       throw new ForbiddenException(
         'You do not have permission to modify this novel.',
       );
