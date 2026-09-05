@@ -23,28 +23,30 @@ export class RecommendationProfileService {
      * to influence the recommendation profile.
      */
 
-    const { data: reading } =
-      await supabase
-        .from('reading_progress')
-        .select(`
-          novel_id,
-          novels!inner(
-            category,
-            author_id
-          )
-        `)
-        .eq('user_id', userId)
-        .eq('novels.status', 'published');
+    const {
+      data: reading,
+    } = await supabase
+      .from('reading_progress')
+      .select(`
+        novel_id,
+        novels!inner(
+          category,
+          created_by
+        )
+      `)
+      .eq('user_id', userId)
+      .eq('novels.status', 'published');
 
     /*
      * Followed Stories
      */
 
-    const { data: follows } =
-      await supabase
-        .from('story_follows')
-        .select('novel_id')
-        .eq('user_id', userId);
+    const {
+      data: follows,
+    } = await supabase
+      .from('story_follows')
+      .select('novel_id')
+      .eq('user_id', userId);
 
     const categories =
       new Set<string>();
@@ -73,9 +75,9 @@ export class RecommendationProfileService {
         );
       }
 
-      if (item.novels?.author_id) {
+      if (item.novels?.created_by) {
         authors.add(
-          item.novels.author_id,
+          item.novels.created_by,
         );
       }
     });

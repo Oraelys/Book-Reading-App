@@ -1,4 +1,3 @@
-
 import {
   Injectable,
 } from '@nestjs/common';
@@ -9,7 +8,6 @@ import { SearchDto } from './dto/search.dto';
 
 @Injectable()
 export class DiscoveryService {
-
   constructor(
     private readonly database: SupabaseService,
   ) {}
@@ -21,7 +19,6 @@ export class DiscoveryService {
    */
 
   async search(dto: SearchDto) {
-
     const supabase =
       this.database.getClient();
 
@@ -65,7 +62,7 @@ export class DiscoveryService {
 
     if (dto.authorId) {
       query = query.eq(
-        'author_id',
+        'created_by',
         dto.authorId,
       );
     }
@@ -75,9 +72,12 @@ export class DiscoveryService {
       error,
     } = await query
       .range(from, to)
-      .order('popularity_score', {
-        ascending: false,
-      });
+      .order(
+        'popularity_score',
+        {
+          ascending: false,
+        },
+      );
 
     if (error) {
       throw error;
@@ -97,7 +97,6 @@ export class DiscoveryService {
    */
 
   async featured() {
-
     const {
       data,
       error,
@@ -123,7 +122,6 @@ export class DiscoveryService {
    */
 
   async trending() {
-
     const {
       data,
       error,
@@ -132,9 +130,12 @@ export class DiscoveryService {
       .from('novels')
       .select('*')
       .eq('status', 'published')
-      .order('trending_score', {
-        ascending: false,
-      })
+      .order(
+        'trending_score',
+        {
+          ascending: false,
+        },
+      )
       .limit(20);
 
     if (error) {
@@ -151,7 +152,6 @@ export class DiscoveryService {
    */
 
   async newReleases() {
-
     const {
       data,
       error,
@@ -160,9 +160,12 @@ export class DiscoveryService {
       .from('novels')
       .select('*')
       .eq('status', 'published')
-      .order('published_at', {
-        ascending: false,
-      })
+      .order(
+        'published_at',
+        {
+          ascending: false,
+        },
+      )
       .limit(20);
 
     if (error) {
@@ -179,7 +182,6 @@ export class DiscoveryService {
    */
 
   async recentlyUpdated() {
-
     const {
       data,
       error,
@@ -188,9 +190,12 @@ export class DiscoveryService {
       .from('novels')
       .select('*')
       .eq('status', 'published')
-      .order('last_activity', {
-        ascending: false,
-      })
+      .order(
+        'last_activity',
+        {
+          ascending: false,
+        },
+      )
       .limit(20);
 
     if (error) {
@@ -209,7 +214,6 @@ export class DiscoveryService {
   async byCategory(
     category: string,
   ) {
-
     const {
       data,
       error,
@@ -219,9 +223,12 @@ export class DiscoveryService {
       .select('*')
       .eq('status', 'published')
       .eq('category', category)
-      .order('popularity_score', {
-        ascending: false,
-      });
+      .order(
+        'popularity_score',
+        {
+          ascending: false,
+        },
+      );
 
     if (error) {
       throw error;
@@ -239,7 +246,6 @@ export class DiscoveryService {
   async byAuthor(
     authorId: string,
   ) {
-
     const {
       data,
       error,
@@ -248,10 +254,13 @@ export class DiscoveryService {
       .from('novels')
       .select('*')
       .eq('status', 'published')
-      .eq('author_id', authorId)
-      .order('popularity_score', {
-        ascending: false,
-      });
+      .eq('created_by', authorId)
+      .order(
+        'popularity_score',
+        {
+          ascending: false,
+        },
+      );
 
     if (error) {
       throw error;
@@ -269,7 +278,6 @@ export class DiscoveryService {
   async continueReading(
     userId: string,
   ) {
-
     const {
       data,
       error,
@@ -281,10 +289,16 @@ export class DiscoveryService {
         novels!inner(*)
       `)
       .eq('user_id', userId)
-      .eq('novels.status', 'published')
-      .order('last_read', {
-        ascending: false,
-      });
+      .eq(
+        'novels.status',
+        'published',
+      )
+      .order(
+        'last_read',
+        {
+          ascending: false,
+        },
+      );
 
     if (error) {
       throw error;
@@ -293,4 +307,3 @@ export class DiscoveryService {
     return data ?? [];
   }
 }
-

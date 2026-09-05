@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Post,
@@ -82,9 +83,9 @@ export class DiscoveryController {
     @Req() request: any,
   ) {
     if (userId !== request.user.id) {
-      return {
-        error: 'You can only access your own reading progress.',
-      };
+      throw new ForbiddenException(
+        'You can only access your own reading progress.',
+      );
     }
 
     return this.discoveryService.continueReading(

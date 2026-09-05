@@ -213,28 +213,30 @@ export class RecommendationsService {
   }
 
   /*
-   * =====================================
-   * Same Author
-   * =====================================
-   */
+ * =====================================
+ * Same Author
+ * =====================================
+ */
 
-  async author(
-    authorId: string,
-  ) {
-    const { data, error } =
-      await this.database
-        .getClient()
-        .from('novels')
-        .select('*')
-        .eq('status', 'published')
-        .eq('author_id', authorId);
+async author(
+  authorId: string,
+) {
+  const {
+    data,
+    error,
+  } = await this.database
+    .getClient()
+    .from('novels')
+    .select('*')
+    .eq('status', 'published')
+    .eq('created_by', authorId);
 
-    if (error) {
-      throw error;
-    }
-
-    return data ?? [];
+  if (error) {
+    throw error;
   }
+
+  return data ?? [];
+}
 
   /*
    * =====================================

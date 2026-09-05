@@ -4,175 +4,160 @@ import { SupabaseService } from '../database/supabase.service';
 
 @Injectable()
 export class PreferencesService {
+  constructor(
+    private readonly database: SupabaseService,
+  ) {}
 
-    constructor(
+  /*
+   * =====================================
+   * Get Profile
+   * =====================================
+   */
 
-        private readonly database:SupabaseService,
+  async get(userId: string) {
+    const {
+      data,
+      error,
+    } = await this.database
+      .getClient()
+      .from('user_preferences')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
 
-    ){}
-
-    /*
-     * =====================================
-     * Get Profile
-     * =====================================
-     */
-
-    async get(userId:string){
-
-        const {data,error}=
-
-        await this.database
-
-        .getClient()
-
-        .from('user_preferences')
-
-        .select('*')
-
-        .eq('user_id',userId)
-
-        .maybeSingle();
-
-        if(error) throw error;
-
-        return data;
-
+    if (error) {
+      throw error;
     }
 
+    return data;
+  }
+
+  /*
+   * =====================================
+   * Rebuild
+   * =====================================
+   */
+
+  async rebuild(userId: string) {
+    const supabase =
+      this.database.getClient();
+
     /*
-     * =====================================
-     * Rebuild
-     * =====================================
+     * Reading Progress
+     *
+     * Only published novels should contribute
+     * to the user's preference profile.
      */
 
-    async rebuild(userId:string){
+    const {
+      data: reading,
+    } = await supabase
+      .from('reading_progress')
+      .select(`
+        *,
+        novels!inner(
+          category,
+          created_by
+        )
+      `)
+      .eq('user_id', userId)
+      .eq('novels.status', 'published');
 
-        const supabase=this.database.getClient();
+    const categories =
+      new Map<string, number>();
 
-        /*
-         * Reading Progress
-         */
+    const authors =
+      new Map<string, number>();
 
-        const {data:reading}=
+    let completed = 0;
+    let started = 0;
 
-        await supabase
+    reading?.forEach((item: any) => {
+      started++;
 
-        .from('reading_progress')
+      if (
+        item.progress_percentage >= 100
+      ) {
+        completed++;
+      }
 
-        .select(`
-            *,
-            novels(
-                category,
-                author_id
-            )
-        `)
+      if (item.novels?.category) {
+        categories.set(
+          item.novels.category,
+          (categories.get(
+            item.novels.category,
+          ) || 0) + 1,
+        );
+      }
 
-        .eq('user_id',userId);
+      if (item.novels?.created_by) {
+        authors.set(
+          item.novels.created_by,
+          (authors.get(
+            item.novels.created_by,
+          ) || 0) + 1,
+        );
+      }
+    });
 
-        const categories=new Map<string,number>();
+    const favoriteCategories =
+      [...categories.entries()]
+        .sort(
+          (a, b) => b[1] - a[1],
+        )
+        .map(
+          category => category[0],
+        );
 
-        const authors=new Map<string,number>();
+    const favoriteAuthors =
+      [...authors.entries()]
+        .sort(
+          (a, b) => b[1] - a[1],
+        )
+        .map(
+          author => author[0],
+        );
 
-        let completed=0;
+    const completionRate =
+      started === 0
+        ? 0
+        : (completed / started) * 100;
 
-        let started=0;
+    const payload = {
+      user_id: userId,
 
-                reading?.forEach((item:any)=>{
+      favorite_categories:
+        favoriteCategories,
 
-            started++;
+      favorite_authors:
+        favoriteAuthors,
 
-            if(item.progress_percentage>=100){
+      average_completion_rate:
+        completionRate,
 
-                completed++;
+      books_started: started,
 
-            }
+      books_completed: completed,
 
-            if(item.novels?.category){
+      updated_at: new Date(),
 
-                categories.set(
+      last_calculated:
+        new Date(),
+    };
 
-                    item.novels.category,
+    const {
+      data,
+      error,
+    } = await supabase
+      .from('user_preferences')
+      .upsert(payload)
+      .select()
+      .single();
 
-                    (categories.get(item.novels.category)||0)+1,
-
-                );
-
-            }
-
-            if(item.novels?.author_id){
-
-                authors.set(
-
-                    item.novels.author_id,
-
-                    (authors.get(item.novels.author_id)||0)+1,
-
-                );
-
-            }
-
-        });
-
-        const favoriteCategories=
-
-        [...categories.entries()]
-
-        .sort((a,b)=>b[1]-a[1])
-
-        .map(c=>c[0]);
-
-        const favoriteAuthors=
-
-        [...authors.entries()]
-
-        .sort((a,b)=>b[1]-a[1])
-
-        .map(a=>a[0]);
-
-        const completionRate=
-
-        started===0
-
-        ?0
-
-        :(completed/started)*100;
-
-                const payload={
-
-            user_id:userId,
-
-            favorite_categories:favoriteCategories,
-
-            favorite_authors:favoriteAuthors,
-
-            average_completion_rate:completionRate,
-
-            books_started:started,
-
-            books_completed:completed,
-
-            updated_at:new Date(),
-
-            last_calculated:new Date(),
-
-        };
-
-        const {data,error}=
-
-        await supabase
-
-        .from('user_preferences')
-
-        .upsert(payload)
-
-        .select()
-
-        .single();
-
-        if(error) throw error;
-
-        return data;
-
+    if (error) {
+      throw error;
     }
 
+    return data;
+  }
 }

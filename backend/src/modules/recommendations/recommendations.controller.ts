@@ -1,5 +1,6 @@
 import {
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Query,
@@ -44,10 +45,9 @@ export class RecommendationsController {
     limit?: number,
   ) {
     if (userId !== request.user.id) {
-      return {
-        error:
-          'You can only access your own recommendations.',
-      };
+      throw new ForbiddenException(
+        'You can only access your own recommendations.',
+      );
     }
 
     return this.recommendationsService.home(
@@ -96,10 +96,9 @@ export class RecommendationsController {
     request: any,
   ) {
     if (userId !== request.user.id) {
-      return {
-        error:
-          'You can only access your own reading progress.',
-      };
+      throw new ForbiddenException(
+        'You can only access your own reading progress.',
+      );
     }
 
     return this.recommendationsService.continueReading(
