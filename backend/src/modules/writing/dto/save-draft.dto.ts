@@ -1,7 +1,8 @@
+import {
+  IsString,
+} from 'class-validator';
+
 export class SaveDraftDto {
-
-    chapterId!: string;
-
-    content!: string;
-
+  @IsString()
+  content!: string;
 }

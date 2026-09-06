@@ -66,7 +66,9 @@ export class ChapterService {
         chapter_number:
           chapterNumber,
         status:
-          dto.status ?? 'draft',
+          typeof dto.status === 'string'
+            ? dto.status
+            : 'draft',
         content:
           typeof dto.content === 'string'
             ? dto.content
@@ -105,6 +107,16 @@ export class ChapterService {
     return data;
   }
 
+  /**
+   * Update editable chapter fields.
+   *
+   * Ownership is enforced by ChapterController
+   * before this method is called.
+   *
+   * Protected relationship/identity fields such as
+   * id, novel_id, created_at and chapter_number are
+   * deliberately not accepted here.
+   */
   async update(
     id: string,
     dto: Record<string, unknown>,
@@ -136,31 +148,50 @@ export class ChapterService {
     const oldWordCount =
       existing.word_count ?? 0;
 
-    const content =
-      typeof dto.content === 'string'
-        ? dto.content
-        : undefined;
-
-    const newWordCount =
-      content !== undefined
-        ? this.countWords(content)
-        : oldWordCount;
-
     const updateData: Record<
       string,
       unknown
-    > = {
-      ...dto,
-      updated_at:
-        new Date().toISOString(),
-      last_saved_at:
-        new Date().toISOString(),
-    };
+    > = {};
 
-    if (content !== undefined) {
-      updateData.word_count =
-        newWordCount;
+    if (
+      typeof dto.title === 'string'
+    ) {
+      updateData.title =
+        dto.title.trim();
     }
+
+    if (
+      typeof dto.content === 'string'
+    ) {
+      updateData.content =
+        dto.content;
+
+      updateData.word_count =
+        this.countWords(
+          dto.content,
+        );
+    }
+
+    if (
+      typeof dto.status === 'string'
+    ) {
+      updateData.status =
+        dto.status;
+    }
+
+    /*
+     * chapter_number is intentionally not
+     * accepted here.
+     *
+     * Chapter ordering must go through
+     * ChapterOrderService.
+     */
+
+    updateData.updated_at =
+      new Date().toISOString();
+
+    updateData.last_saved_at =
+      new Date().toISOString();
 
     const {
       data,
@@ -181,6 +212,9 @@ export class ChapterService {
         `Chapter ${id} not found.`,
       );
     }
+
+    const newWordCount =
+      data.word_count ?? oldWordCount;
 
     const difference =
       newWordCount - oldWordCount;
@@ -312,8 +346,6 @@ export class ChapterService {
       );
     }
 
-    // This verifies that the parent novel is
-    // itself publicly published.
     await this.novelsService.findPublishedOne(
       chapterReference.novel_id,
     );
@@ -353,8 +385,6 @@ export class ChapterService {
     const supabase =
       this.database.getClient();
 
-    // This prevents chapter enumeration against
-    // an unpublished/draft novel.
     await this.novelsService.findPublishedOne(
       novelId,
     );
