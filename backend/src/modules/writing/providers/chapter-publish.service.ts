@@ -5,12 +5,14 @@ import {
 } from '@nestjs/common';
 
 import { SupabaseService } from '../../database/supabase.service';
+import { NovelsService } from '../../novels/novels.service';
 import { ChapterMetricsService } from './chapter-metrics.service';
 
 @Injectable()
 export class ChapterPublishService {
   constructor(
     private readonly database: SupabaseService,
+    private readonly novelsService: NovelsService,
     private readonly metrics: ChapterMetricsService,
   ) {}
 
@@ -21,6 +23,8 @@ export class ChapterPublishService {
    * - exist
    * - contain content
    * - belong to the requested novel when novelId is supplied
+   *
+   * Publication state is owned by this service.
    */
   async publish(
     chapterId: string,
@@ -90,6 +94,9 @@ export class ChapterPublishService {
     const now =
       new Date().toISOString();
 
+    const wasPublished =
+      chapter.is_published === true;
+
     const {
       data,
       error: updateError,
@@ -128,6 +135,19 @@ export class ChapterPublishService {
       throw updateError;
     }
 
+    /*
+     * Only increment the novel counter when
+     * transitioning from unpublished -> published.
+     *
+     * This prevents repeated publish calls from
+     * inflating published_chapters.
+     */
+    if (!wasPublished) {
+      await this.novelsService.incrementPublishedCount(
+        chapter.novel_id,
+      );
+    }
+
     return {
       success: true,
       chapter: data,
@@ -136,6 +156,10 @@ export class ChapterPublishService {
 
   /**
    * Unpublish a chapter.
+   *
+   * The novel's published_chapters counter is
+   * decremented only when the chapter was actually
+   * published before this operation.
    */
   async unpublish(
     chapterId: string,
@@ -181,6 +205,9 @@ export class ChapterPublishService {
       );
     }
 
+    const wasPublished =
+      chapter.is_published === true;
+
     const now =
       new Date().toISOString();
 
@@ -211,6 +238,19 @@ export class ChapterPublishService {
 
     if (updateError) {
       throw updateError;
+    }
+
+    /*
+     * Only decrement when transitioning from
+     * published -> unpublished.
+     *
+     * This prevents repeated unpublish calls from
+     * driving the counter below the real value.
+     */
+    if (wasPublished) {
+      await this.novelsService.decrementPublishedCount(
+        chapter.novel_id,
+      );
     }
 
     return {
@@ -399,7 +439,7 @@ export class ChapterPublishService {
         published_at,
         unpublished_at,
         status
-        `,
+        `
       )
       .eq(
         'novel_id',

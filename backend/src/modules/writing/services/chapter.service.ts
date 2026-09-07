@@ -116,6 +116,9 @@ export class ChapterService {
    * Protected relationship/identity fields such as
    * id, novel_id, created_at and chapter_number are
    * deliberately not accepted here.
+   *
+   * Publication state is managed exclusively by
+   * ChapterPublishService.
    */
   async update(
     id: string,
@@ -172,12 +175,13 @@ export class ChapterService {
         );
     }
 
-    if (
-      typeof dto.status === 'string'
-    ) {
-      updateData.status =
-        dto.status;
-    }
+    /*
+     * status is intentionally NOT accepted here.
+     *
+     * Publication state must be changed through
+     * ChapterPublishService so that the corresponding
+     * novels.published_chapters counter stays in sync.
+     */
 
     /*
      * chapter_number is intentionally not
@@ -187,11 +191,14 @@ export class ChapterService {
      * ChapterOrderService.
      */
 
-    updateData.updated_at =
+    const now =
       new Date().toISOString();
 
+    updateData.updated_at =
+      now;
+
     updateData.last_saved_at =
-      new Date().toISOString();
+      now;
 
     const {
       data,
@@ -214,10 +221,12 @@ export class ChapterService {
     }
 
     const newWordCount =
-      data.word_count ?? oldWordCount;
+      data.word_count ??
+      oldWordCount;
 
     const difference =
-      newWordCount - oldWordCount;
+      newWordCount -
+      oldWordCount;
 
     if (difference !== 0) {
       await this.novelsService.updateWordCount(
@@ -282,6 +291,11 @@ export class ChapterService {
         );
     }
 
+    /*
+     * If a published chapter is deleted,
+     * the published chapter counter must also
+     * be decremented.
+     */
     if (
       chapter.status === 'published'
     ) {
