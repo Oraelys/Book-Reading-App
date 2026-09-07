@@ -17,6 +17,11 @@ export class ContentStorageService {
   /**
    * Save the result of the content-processing
    * pipeline into the chapters table.
+   *
+   * Chapter replacement and novel aggregate
+   * counter synchronization are handled by a
+   * single database transaction through the
+   * replace_novel_chapters RPC.
    */
   async saveDocument(
     novelId: string,
@@ -58,23 +63,10 @@ export class ContentStorageService {
     }
 
     /*
-     * Re-processing a book replaces its
-     * previously generated chapter records.
+     * Prepare the processed chapters before
+     * handing them to the atomic database
+     * replacement operation.
      */
-    const {
-      error: deleteError,
-    } = await supabase
-      .from('chapters')
-      .delete()
-      .eq(
-        'novel_id',
-        novelId,
-      );
-
-    if (deleteError) {
-      throw deleteError;
-    }
-
     const rows =
       chapters.map(
         (
@@ -85,9 +77,6 @@ export class ContentStorageService {
             chapter.content || '';
 
           return {
-            novel_id:
-              novelId,
-
             title:
               chapter.title ||
               `Chapter ${index + 1}`,
@@ -109,41 +98,55 @@ export class ContentStorageService {
               this.estimateReadingMinutes(
                 content,
               ),
-
-            /*
-             * Processed chapters must remain
-             * hidden until explicitly published.
-             */
-            is_published:
-              false,
-
-            published_at:
-              null,
-
-            created_at:
-              new Date().toISOString(),
-
-            updated_at:
-              new Date().toISOString(),
           };
         },
       );
 
+    /*
+     * Atomically:
+     *
+     * 1. Delete the previous chapter set.
+     * 2. Insert the newly processed chapters.
+     * 3. Recalculate total_chapters.
+     * 4. Recalculate published_chapters.
+     * 5. Recalculate word_count.
+     *
+     * All of those operations occur inside one
+     * PostgreSQL transaction.
+     */
     const {
       data,
       error,
-    } = await supabase
-      .from('chapters')
-      .insert(rows)
-      .select();
+    } = await supabase.rpc(
+      'replace_novel_chapters',
+      {
+        p_novel_id:
+          novelId,
+
+        p_chapters:
+          rows,
+      },
+    );
 
     if (error) {
+      if (
+        error.code === 'P0002'
+      ) {
+        throw new NotFoundException(
+          'Novel not found',
+        );
+      }
+
       throw error;
     }
 
     /*
      * Update basic novel metadata when
      * metadata was extracted from the book.
+     *
+     * This intentionally remains separate from
+     * chapter replacement because these fields
+     * are metadata rather than chapter aggregates.
      */
     const novelUpdate: Record<
       string,
