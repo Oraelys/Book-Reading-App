@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NotFoundException,
@@ -19,13 +18,15 @@ export class NovelsService {
    * WritingService rather than this API.
    */
   async create(data: any) {
-    const { data: novel, error } =
-      await this.database
-        .getClient()
-        .from('novels')
-        .insert(data)
-        .select()
-        .single();
+    const {
+      data: novel,
+      error,
+    } = await this.database
+      .getClient()
+      .from('novels')
+      .insert(data)
+      .select()
+      .single();
 
     if (error) {
       throw error;
@@ -40,15 +41,17 @@ export class NovelsService {
    * Only published novels are exposed.
    */
   async findPublished() {
-    const { data, error } =
-      await this.database
-        .getClient()
-        .from('novels')
-        .select('*')
-        .eq('status', 'published')
-        .order('updated_at', {
-          ascending: false,
-        });
+    const {
+      data,
+      error,
+    } = await this.database
+      .getClient()
+      .from('novels')
+      .select('*')
+      .eq('status', 'published')
+      .order('updated_at', {
+        ascending: false,
+      });
 
     if (error) {
       throw error;
@@ -62,15 +65,19 @@ export class NovelsService {
    *
    * Only published novels are exposed.
    */
-  async findPublishedOne(id: string) {
-    const { data, error } =
-      await this.database
-        .getClient()
-        .from('novels')
-        .select('*')
-        .eq('id', id)
-        .eq('status', 'published')
-        .single();
+  async findPublishedOne(
+    id: string,
+  ) {
+    const {
+      data,
+      error,
+    } = await this.database
+      .getClient()
+      .from('novels')
+      .select('*')
+      .eq('id', id)
+      .eq('status', 'published')
+      .single();
 
     if (error || !data) {
       throw new NotFoundException(
@@ -90,13 +97,15 @@ export class NovelsService {
    * to work with a novel before it is published.
    */
   async findOne(id: string) {
-    const { data, error } =
-      await this.database
-        .getClient()
-        .from('novels')
-        .select('*')
-        .eq('id', id)
-        .single();
+    const {
+      data,
+      error,
+    } = await this.database
+      .getClient()
+      .from('novels')
+      .select('*')
+      .eq('id', id)
+      .single();
 
     if (error || !data) {
       throw new NotFoundException(
@@ -118,17 +127,19 @@ export class NovelsService {
     id: string,
     dto: any,
   ) {
-    const { data, error } =
-      await this.database
-        .getClient()
-        .from('novels')
-        .update({
-          ...dto,
-          updated_at: new Date(),
-        })
-        .eq('id', id)
-        .select()
-        .single();
+    const {
+      data,
+      error,
+    } = await this.database
+      .getClient()
+      .from('novels')
+      .update({
+        ...dto,
+        updated_at: new Date(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
 
     if (error) {
       throw error;
@@ -144,32 +155,45 @@ export class NovelsService {
    * NovelsController.
    */
   async delete(id: string) {
-    await this.database
+    const {
+      error,
+    } = await this.database
       .getClient()
       .from('novels')
       .delete()
       .eq('id', id);
+
+    if (error) {
+      throw error;
+    }
 
     return {
       success: true,
     };
   }
 
+  /**
+   * Increment the total chapter counter.
+   */
   async incrementChapterCount(
     novelId: string,
   ) {
-    const { error } =
-      await this.database
-        .getClient()
-        .rpc('increment_chapter_count', {
-          novel_uuid: novelId,
-        });
+    const {
+      error,
+    } = await this.database
+      .getClient()
+      .rpc('increment_chapter_count', {
+        novel_uuid: novelId,
+      });
 
     if (error) {
       throw error;
     }
   }
 
+  /**
+   * Decrement the total chapter counter.
+   */
   async decrementChapterCount(
     novelId: string,
   ) {
@@ -178,29 +202,46 @@ export class NovelsService {
 
     const {
       data: novel,
-      error,
+      error: fetchError,
     } = await supabase
       .from('novels')
       .select('total_chapters')
       .eq('id', novelId)
       .single();
 
-    if (error) {
-      throw error;
+    if (fetchError) {
+      throw fetchError;
     }
 
-    await supabase
+    if (!novel) {
+      throw new NotFoundException(
+        'Novel not found.',
+      );
+    }
+
+    const {
+      error: updateError,
+    } = await supabase
       .from('novels')
       .update({
-        total_chapters: Math.max(
-          (novel.total_chapters ?? 1) - 1,
-          0,
-        ),
-        updated_at: new Date(),
+        total_chapters:
+          Math.max(
+            (novel.total_chapters ?? 1) - 1,
+            0,
+          ),
+        updated_at:
+          new Date(),
       })
       .eq('id', novelId);
+
+    if (updateError) {
+      throw updateError;
+    }
   }
 
+  /**
+   * Increment the number of published chapters.
+   */
   async incrementPublishedCount(
     novelId: string,
   ) {
@@ -209,27 +250,43 @@ export class NovelsService {
 
     const {
       data: novel,
-      error,
+      error: fetchError,
     } = await supabase
       .from('novels')
       .select('published_chapters')
       .eq('id', novelId)
       .single();
 
-    if (error) {
-      throw error;
+    if (fetchError) {
+      throw fetchError;
     }
 
-    await supabase
+    if (!novel) {
+      throw new NotFoundException(
+        'Novel not found.',
+      );
+    }
+
+    const {
+      error: updateError,
+    } = await supabase
       .from('novels')
       .update({
         published_chapters:
           (novel.published_chapters ?? 0) + 1,
-        updated_at: new Date(),
+        updated_at:
+          new Date(),
       })
       .eq('id', novelId);
+
+    if (updateError) {
+      throw updateError;
+    }
   }
 
+  /**
+   * Decrement the number of published chapters.
+   */
   async decrementPublishedCount(
     novelId: string,
   ) {
@@ -238,29 +295,46 @@ export class NovelsService {
 
     const {
       data: novel,
-      error,
+      error: fetchError,
     } = await supabase
       .from('novels')
       .select('published_chapters')
       .eq('id', novelId)
       .single();
 
-    if (error) {
-      throw error;
+    if (fetchError) {
+      throw fetchError;
     }
 
-    await supabase
+    if (!novel) {
+      throw new NotFoundException(
+        'Novel not found.',
+      );
+    }
+
+    const {
+      error: updateError,
+    } = await supabase
       .from('novels')
       .update({
-        published_chapters: Math.max(
-          (novel.published_chapters ?? 1) - 1,
-          0,
-        ),
-        updated_at: new Date(),
+        published_chapters:
+          Math.max(
+            (novel.published_chapters ?? 1) - 1,
+            0,
+          ),
+        updated_at:
+          new Date(),
       })
       .eq('id', novelId);
+
+    if (updateError) {
+      throw updateError;
+    }
   }
 
+  /**
+   * Adjust the novel's aggregate word count.
+   */
   async updateWordCount(
     novelId: string,
     difference: number,
@@ -270,28 +344,41 @@ export class NovelsService {
 
     const {
       data: novel,
-      error,
+      error: fetchError,
     } = await supabase
       .from('novels')
       .select('word_count')
       .eq('id', novelId)
       .single();
 
-    if (error) {
-      throw error;
+    if (fetchError) {
+      throw fetchError;
     }
 
-    await supabase
+    if (!novel) {
+      throw new NotFoundException(
+        'Novel not found.',
+      );
+    }
+
+    const {
+      error: updateError,
+    } = await supabase
       .from('novels')
       .update({
-        word_count: Math.max(
-          (novel.word_count ?? 0) +
-            difference,
-          0,
-        ),
-        updated_at: new Date(),
+        word_count:
+          Math.max(
+            (novel.word_count ?? 0) +
+              difference,
+            0,
+          ),
+        updated_at:
+          new Date(),
       })
       .eq('id', novelId);
+
+    if (updateError) {
+      throw updateError;
+    }
   }
 }
-
