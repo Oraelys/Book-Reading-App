@@ -1,8 +1,7 @@
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native'
+import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native'
 import React from 'react'
 import ScreenWrapper from '@/components/ScreenWrapper'
-import Typo from '@/components/Typo'
-import { colors, radius, spacingX, spacingY } from '@/constants/theme'
+import { colors } from '@/constants/theme'
 import BackButton from '@/components/BackButton'
 
 export default function Register() {
@@ -10,7 +9,6 @@ export default function Register() {
     <KeyboardAvoidingView style={{flex: 1}} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScreenWrapper showPattern={true}>
         <View style={styles.container}>
-
             <View style={styles.header}>
                 <BackButton/>
             </View>
@@ -22,7 +20,7 @@ export default function Register() {
 
 const styles = StyleSheet.create({
     container : {
-        flex: 1, 
+        flex: 1,
         gap: 30,
         marginHorizontal: 20,
         justifyContent: 'space-between'
@@ -36,7 +34,7 @@ const styles = StyleSheet.create({
         alignItems:'center'
     },
     content: {
-        flex: 1, 
+        flex: 1,
         backgroundColor: colors.white,
         borderTopLeftRadius: 50,
         borderTopRightRadius: 50,
