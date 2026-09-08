@@ -21,10 +21,7 @@ export interface Novel {
   total_ratings: number;
   views: number;
   tags?: Tag[];
-  reading_progress?: {
-    progress_percentage: number;
-    current_page: number;
-  };
+  reading_progress?: { progress_percentage: number; current_page: number };
 }
 
 export interface UserProfile {
@@ -33,11 +30,6 @@ export interface UserProfile {
   preferred_categories?: string[];
 }
 
-// One section rendered on the home screen.
-// sectionType drives heading copy.
-//   'next_read'  - personalised first section: "Your Next Read"
-//   'preferred'  - user's other preferred genres
-//   'category'   - remaining major genres
 export interface CategorySection {
   category: string;
   books: Novel[];
@@ -45,7 +37,12 @@ export interface CategorySection {
   label: string;
 }
 
-// Advertisement carousel item
+export interface TagSection {
+  tag: Tag;
+  books: Novel[];
+  label: string;
+}
+
 export interface Advertisement {
   id: string;
   image_url: string;
