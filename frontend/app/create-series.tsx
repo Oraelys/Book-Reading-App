@@ -3,6 +3,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
+import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContexts';
@@ -41,11 +42,7 @@ export default function CreateSeriesScreen() {
         const statsMap = new Map((statsData ?? []).map(s => [s.novel_id, s]));
         const stories: Story[] = novels.map(n => {
           const s = statsMap.get(n.id);
-          return {
-            id: n.id, title: n.title, cover_image_url: n.cover_image_url, tags: [],
-            total_chapters: s?.total_chapters ?? 0, published_chapters: s?.published_chapters ?? 0,
-            views: n.views ?? 0, followers: 0, status: (n.status ?? 'draft') as Story['status'],
-          };
+          return { id: n.id, title: n.title, cover_image_url: n.cover_image_url, tags: [], total_chapters: s?.total_chapters ?? 0, published_chapters: s?.published_chapters ?? 0, views: n.views ?? 0, followers: 0, status: (n.status ?? 'draft') as Story['status'] };
         });
         setAllStories(stories);
       } catch (e) { console.warn('[CreateSeries] loadStories:', e); }
