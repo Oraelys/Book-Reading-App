@@ -1,14 +1,43 @@
 // hooks/useChapters.ts
+
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import { Chapter } from '@/types/chapter';
+
+interface CreateChapterResponse extends Chapter {}
+
+interface UpdateChapterResponse extends Chapter {}
+
+interface PublishChapterResponse extends Chapter {}
+
+interface CreateChapterPayload {
+  novel_id: string;
+  title: string;
+  content: string;
+  chapter_number: number;
+  status: 'draft';
+  word_count: number;
+}
+
+interface UpdateChapterPayload {
+  title?: string;
+  content?: string;
+  word_count?: number;
+}
 
 /**
  * Manages chapters belonging to an EXISTING story (novelId).
- * This hook never creates or touches the parent `novels` row — the story
- * must already exist (created by the Create Story flow) before this hook
- * is used. Keeping that boundary here means WritingEditorScreen physically
- * cannot create a duplicate story record.
+ *
+ * Reads are performed through Supabase.
+ *
+ * Author mutations are performed through the NestJS API so that:
+ * - ownership authorization is enforced by the backend;
+ * - chapter counters are maintained centrally;
+ * - word-count aggregates remain synchronized;
+ * - publishing state is handled by the publishing services.
+ *
+ * This hook never creates or touches the parent `novels` row.
  */
 export function useChapters(novelId: string | undefined) {
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -19,6 +48,7 @@ export function useChapters(novelId: string | undefined) {
       setLoading(false);
       return;
     }
+
     try {
       const { data, error } = await supabase
         .from('chapters')
@@ -30,6 +60,7 @@ export function useChapters(novelId: string | undefined) {
         console.warn('[useChapters] load:', error.message);
         return;
       }
+
       setChapters(data ?? []);
     } catch (e) {
       console.warn('[useChapters] load:', e);
@@ -42,84 +73,170 @@ export function useChapters(novelId: string | undefined) {
     loadChapters();
   }, [loadChapters]);
 
-  const createChapter = useCallback(async (): Promise<Chapter | null> => {
-    if (!novelId) return null;
+  const createChapter = useCallback(
+    async (): Promise<Chapter | null> => {
+      if (!novelId) return null;
 
-    const nextNumber = chapters.length > 0
-      ? Math.max(...chapters.map(c => c.chapter_number)) + 1
-      : 1;
+      const nextNumber =
+        chapters.length > 0
+          ? Math.max(...chapters.map((c) => c.chapter_number)) + 1
+          : 1;
 
-    try {
-      const { data, error } = await supabase
-        .from('chapters')
-        .insert({
-          novel_id: novelId,
-          title: `Chapter ${nextNumber}`,
-          content: '',
-          chapter_number: nextNumber,
-          status: 'draft',
-          word_count: 0,
-        })
-        .select('*')
-        .single();
+      const payload: CreateChapterPayload = {
+        novel_id: novelId,
+        title: `Chapter ${nextNumber}`,
+        content: '',
+        chapter_number: nextNumber,
+        status: 'draft',
+        word_count: 0,
+      };
 
-      if (error || !data) {
-        console.warn('[useChapters] create:', error?.message);
+      try {
+        const data = await apiRequest<CreateChapterResponse>(
+          '/chapters',
+          {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          },
+        );
+
+        if (!data) {
+          console.warn(
+            '[useChapters] create: backend returned no chapter',
+          );
+          return null;
+        }
+
+        setChapters((prev) => {
+          const exists = prev.some((chapter) => chapter.id === data.id);
+
+          if (exists) {
+            return prev.map((chapter) =>
+              chapter.id === data.id ? data : chapter,
+            );
+          }
+
+          return [...prev, data].sort(
+            (a, b) => a.chapter_number - b.chapter_number,
+          );
+        });
+
+        return data;
+      } catch (e) {
+        console.warn('[useChapters] create:', e);
         return null;
       }
+    },
+    [novelId, chapters],
+  );
 
-      setChapters(prev => [...prev, data]);
-      return data;
-    } catch (e) {
-      console.warn('[useChapters] create:', e);
-      return null;
-    }
-  }, [novelId, chapters]);
+  const persistChapter = useCallback(
+    async (
+      chapterId: string,
+      patch: {
+        title?: string;
+        content?: string;
+        word_count?: number;
+      },
+    ) => {
+      const payload: UpdateChapterPayload = {
+        ...(patch.title !== undefined
+          ? { title: patch.title }
+          : {}),
+        ...(patch.content !== undefined
+          ? { content: patch.content }
+          : {}),
+        ...(patch.word_count !== undefined
+          ? { word_count: patch.word_count }
+          : {}),
+      };
 
-  const persistChapter = useCallback(async (
-    chapterId: string,
-    patch: { title?: string; content?: string; word_count?: number },
-  ) => {
-    const { error } = await supabase
-      .from('chapters')
-      .update({ ...patch, updated_at: new Date().toISOString() })
-      .eq('id', chapterId);
+      try {
+        const data = await apiRequest<UpdateChapterResponse>(
+          `/chapters/${chapterId}`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+          },
+        );
 
-    if (error) {
-      console.warn('[useChapters] persist:', error.message);
-      throw error;
-    }
+        setChapters((prev) =>
+          prev.map((chapter) =>
+            chapter.id === chapterId
+              ? {
+                  ...chapter,
+                  ...(data ?? payload),
+                }
+              : chapter,
+          ),
+        );
+      } catch (e) {
+        console.warn('[useChapters] persist:', e);
+        throw e;
+      }
+    },
+    [],
+  );
 
-    setChapters(prev => prev.map(c => (c.id === chapterId ? { ...c, ...patch } : c)));
-  }, []);
+  const publishChapter = useCallback(
+    async (chapterId: string): Promise<boolean> => {
+      if (!novelId) return false;
 
-  const publishChapter = useCallback(async (chapterId: string): Promise<boolean> => {
-    const publishedAt = new Date().toISOString();
-    const { error } = await supabase
-      .from('chapters')
-      .update({ status: 'published', published_at: publishedAt })
-      .eq('id', chapterId);
+      try {
+        const data = await apiRequest<PublishChapterResponse>(
+          `/chapters/${chapterId}/publish`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              novelId,
+            }),
+          },
+        );
 
-    if (error) {
-      console.warn('[useChapters] publish:', error.message);
-      return false;
-    }
+        const publishedAt =
+          data?.published_at ?? new Date().toISOString();
 
-    setChapters(prev => prev.map(c => (
-      c.id === chapterId ? { ...c, status: 'published', published_at: publishedAt } : c
-    )));
-    return true;
-  }, []);
+        setChapters((prev) =>
+          prev.map((chapter) =>
+            chapter.id === chapterId
+              ? {
+                  ...chapter,
+                  ...(data ?? {}),
+                  status: 'published',
+                  published_at: publishedAt,
+                }
+              : chapter,
+          ),
+        );
 
-  const deleteChapter = useCallback(async (chapterId: string): Promise<boolean> => {
-    const { error } = await supabase.from('chapters').delete().eq('id', chapterId);
-    if (error) {
-      console.warn('[useChapters] delete:', error.message);
-      return false;
-    }
-    setChapters(prev => prev.filter(c => c.id !== chapterId));
-    return true;
-  }, []);
+        return true;
+      } catch (e) {
+        console.warn('[useChapters] publish:', e);
+        return false;
+      }
+    },
+    [novelId],
+  );
+
+  const deleteChapter = useCallback(
+    async (chapterId: string): Promise<boolean> => {
+      try {
+        await apiRequest(`/chapters/${chapterId}`, {
+          method: 'DELETE',
+        });
+
+        setChapters((prev) =>
+          prev.filter((chapter) => chapter.id !== chapterId),
+        );
+
+        return true;
+      } catch (e) {
+        console.warn('[useChapters] delete:', e);
+        return false;
+      }
+    },
+    [],
+  );
 
   return {
     chapters,
