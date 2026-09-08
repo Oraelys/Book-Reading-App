@@ -26,13 +26,9 @@ export default function AuthorDashboardScreen() {
 
   const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
 
-  // ---------------------------------------------------------------------------
-  // Data fetching
-  // ---------------------------------------------------------------------------
   const loadDashboard = useCallback(async () => {
     if (!user) return;
     try {
-      // 1. Author's novels
       const { data: novelsData, error: novelsError } = await supabase
         .from('novels')
         .select('id, title, cover_image_url, views, status')
@@ -51,8 +47,6 @@ export default function AuthorDashboardScreen() {
       }
 
       const novelIds = novels.map(n => n.id);
-
-      // 2. Chapter stats per novel (total + published)
       const { data: chapterStatsData, error: chapterStatsError } = await supabase
         .from('novel_chapter_stats')
         .select('novel_id, total_chapters, published_chapters')
@@ -65,8 +59,6 @@ export default function AuthorDashboardScreen() {
         (chapterStatsData ?? []).map(s => [s.novel_id, s]),
       );
 
-      // 3. Tags — two-step query since these novels may be private drafts
-      //    (novels_with_tags view doesn't expose non-public rows)
       const { data: novelTagRows, error: novelTagError } = await supabase
         .from('novel_tags')
         .select('novel_id, tag_id')
@@ -98,7 +90,6 @@ export default function AuthorDashboardScreen() {
         tagsByNovel.get(row.novel_id)!.push(tag);
       }
 
-      // 4. Merge everything into Story[]
       const merged: Story[] = novels.map(n => {
         const chStats = chapterStatsMap.get(n.id);
         return {
@@ -109,6 +100,7 @@ export default function AuthorDashboardScreen() {
           total_chapters: chStats?.total_chapters ?? 0,
           published_chapters: chStats?.published_chapters ?? 0,
           views: n.views ?? 0,
+          followers: 0,
           status: (n.status ?? 'draft') as Story['status'],
         };
       });
@@ -121,34 +113,15 @@ export default function AuthorDashboardScreen() {
     }
   }, [user]);
 
-  useEffect(() => {
-    loadDashboard();
-  }, [loadDashboard]);
+  useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
-  // ---------------------------------------------------------------------------
-  // Handlers
-  // ---------------------------------------------------------------------------
   const handleStoryPress = useCallback((story: Story) => {
-    router.push({
-      pathname: '/story-page',
-      params: { storyId: story.id },
-    } as any);
+    router.push({ pathname: '/story-page', params: { storyId: story.id } } as any);
   }, [router]);
 
-  const handleStoriesPress = useCallback(() => {
-    console.log('[AuthorDashboard] navigating to stories-management');
-    router.push('/stories-management' as any);
-  }, [router]);
-
-  const handleSeriesPress = useCallback(() => {
-    console.log('[AuthorDashboard] navigating to series-screen');
-    router.push('/create-series' as any);
-  }, [router]);
-
-  const handleCreatePress = useCallback(() => {
-    console.log('[AuthorDashboard] navigating to create-novel');
-    router.push('/create-novel' as any);
-  }, [router]);
+  const handleStoriesPress = useCallback(() => router.push('/stories-management' as any), [router]);
+  const handleSeriesPress = useCallback(() => router.push('/create-series' as any), [router]);
+  const handleCreatePress = useCallback(() => router.push('/create-novel' as any), [router]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -157,88 +130,40 @@ export default function AuthorDashboardScreen() {
   }, [loadDashboard]);
 
   const renderStory = useCallback(
-    ({ item }: { item: Story }) => (
-      <StoryCard story={item} onPress={handleStoryPress} theme={theme} />
-    ),
+    ({ item }: { item: Story }) => <StoryCard story={item} onPress={handleStoryPress} theme={theme} />,
     [handleStoryPress, theme],
   );
 
   const refreshControl = useMemo(() => (
-    <RefreshControl
-      refreshing={refreshing}
-      onRefresh={onRefresh}
-      tintColor={theme.primary}
-      colors={[theme.primary]}
-    />
+    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} colors={[theme.primary]} />
   ), [refreshing, onRefresh, theme.primary]);
 
   const listHeader = useMemo(() => (
     <Text style={[styles.pageTitle, { color: theme.text }]}>My Stories</Text>
   ), [theme, styles.pageTitle]);
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
   if (loading) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
-        </View>
-      </SafeAreaView>
-    );
+    return <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}><View style={styles.centerContainer}><ActivityIndicator size="large" color={theme.primary} /></View></SafeAreaView>;
   }
 
   if (stories.length === 0) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-        <ScrollView
-          contentContainerStyle={styles.emptyListContent}
-          refreshControl={refreshControl}
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={[styles.pageTitle, { color: theme.text }]}>Write</Text>
-          <EmptyStateTiles
-            onStoriesPress={handleStoriesPress}
-            onSeriesPress={handleSeriesPress}
-            onCreatePress={handleCreatePress}
-            theme={theme}
-          />
-        </ScrollView>
-      </SafeAreaView>
-    );
+    return <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+      <ScrollView contentContainerStyle={styles.emptyListContent} refreshControl={refreshControl} showsVerticalScrollIndicator={false}>
+        <Text style={[styles.pageTitle, { color: theme.text }]}>Write</Text>
+        <EmptyStateTiles onStoriesPress={handleStoriesPress} onSeriesPress={handleSeriesPress} onCreatePress={handleCreatePress} theme={theme} />
+      </ScrollView>
+    </SafeAreaView>;
   }
 
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      <FlatList
-        data={stories}
-        renderItem={renderStory}
-        keyExtractor={keyExtractor}
-        ListHeaderComponent={listHeader}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={refreshControl}
-        initialNumToRender={6}
-        maxToRenderPerBatch={6}
-        windowSize={7}
-        removeClippedSubviews={true}
-      />
-    </SafeAreaView>
-  );
+  return <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+    <FlatList data={stories} renderItem={renderStory} keyExtractor={keyExtractor} ListHeaderComponent={listHeader} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false} refreshControl={refreshControl} initialNumToRender={6} maxToRenderPerBatch={6} windowSize={7} removeClippedSubviews={true} />
+  </SafeAreaView>;
 }
 
-const getStyles = (theme: any, _isDark: boolean) =>
-  StyleSheet.create({
-    container: { flex: 1 },
-    centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    pageTitle: {
-      fontSize: 24,
-      fontWeight: '700',
-      paddingHorizontal: 20,
-      marginTop: 8,
-      marginBottom: 16,
-    },
-    listContent: { paddingHorizontal: 20, paddingBottom: 40 },
-    emptyListContent: { paddingBottom: 40, flexGrow: 1 },
-  });
+const getStyles = (theme: any, _isDark: boolean) => StyleSheet.create({
+  container: { flex: 1 },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  pageTitle: { fontSize: 24, fontWeight: '700', paddingHorizontal: 20, marginTop: 8, marginBottom: 16 },
+  listContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  emptyListContent: { paddingBottom: 40, flexGrow: 1 },
+});
