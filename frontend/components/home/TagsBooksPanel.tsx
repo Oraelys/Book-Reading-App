@@ -1,4 +1,4 @@
-// components/home/TagBooksPanel.tsx
+// components/home/TagsBooksPanel.tsx
 import React, { memo } from 'react';
 import { View } from 'react-native';
 import BookSection from './BookSection';
@@ -12,19 +12,17 @@ interface TagBooksPanelProps {
   theme: any;
 }
 
-const TagBooksPanel = memo(({
-  tagSections, onBookPress, onBookLongPress, onSeeAll, theme,
-}: TagBooksPanelProps) => (
+const TagBooksPanel = memo(({ tagSections, onBookPress, onBookLongPress, onSeeAll, theme }: TagBooksPanelProps) => (
   <View>
     {tagSections.map(section => (
       <BookSection
         key={section.tag.id}
-        tag={section.tag}
-        books={section.books}
         label={section.label}
+        category={section.tag.slug}
+        books={section.books}
         onBookPress={onBookPress}
         onBookLongPress={onBookLongPress}
-        onSeeAll={onSeeAll}
+        onSeeAll={() => onSeeAll(section.tag)}
         theme={theme}
       />
     ))}
