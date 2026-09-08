@@ -1,3 +1,4 @@
+
 // services/chatservices.ts - Updated with proper read tracking
 import { supabase } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -68,10 +69,14 @@ export interface StatusUpdate {
 export class ChatService {
   private static profileCache: Map<string, Profile> = new Map();
 
-  static async getUsersByIds(userIds: string[]): Promise<Map<string, Profile>> {
+  static async getUsersByIds(
+    userIds: string[],
+  ): Promise<Map<string, Profile>> {
     const uniqueIds: string[] = [...new Set(userIds)];
-    const uncachedIds: string[] = uniqueIds.filter(id => !this.profileCache.has(id));
-    
+    const uncachedIds: string[] = uniqueIds.filter(
+      (id) => !this.profileCache.has(id),
+    );
+
     if (uncachedIds.length > 0) {
       try {
         const { data, error } = await supabase
@@ -90,9 +95,13 @@ export class ChatService {
     }
 
     const result: Map<string, Profile> = new Map<string, Profile>();
+
     uniqueIds.forEach((id: string) => {
       const profile: Profile | undefined = this.profileCache.get(id);
-      if (profile) result.set(id, profile);
+
+      if (profile) {
+        result.set(id, profile);
+      }
     });
 
     return result;
@@ -114,15 +123,15 @@ export class ChatService {
   static async searchUsers(searchTerm: string): Promise<Profile[]> {
     try {
       const { data, error } = await supabase.rpc('search_users', {
-        search_term: searchTerm
+        search_term: searchTerm,
       });
 
       if (error) throw error;
-      
-      data?.forEach(profile => {
+
+      data?.forEach((profile: Profile) => {
         this.profileCache.set(profile.id, profile);
       });
-      
+
       return data || [];
     } catch (error) {
       console.error('Error searching users:', error);
@@ -139,11 +148,11 @@ export class ChatService {
         .single();
 
       if (error) throw error;
-      
+
       if (data) {
         this.profileCache.set(data.id, data);
       }
-      
+
       return data;
     } catch (error) {
       console.error('Error getting user by tag:', error);
@@ -151,13 +160,16 @@ export class ChatService {
     }
   }
 
-  static async getOrCreateDMRoom(otherUserId: string): Promise<string | null> {
+  static async getOrCreateDMRoom(
+    otherUserId: string,
+  ): Promise<string | null> {
     try {
       const { data, error } = await supabase.rpc('get_or_create_dm_room', {
-        other_user_id: otherUserId
+        other_user_id: otherUserId,
       });
 
       if (error) throw error;
+
       return data;
     } catch (error) {
       console.error('Error getting/creating DM room:', error);
@@ -165,9 +177,16 @@ export class ChatService {
     }
   }
 
-  static async createGroupChat(name: string, description: string, memberIds: string[]): Promise<ChatRoom | null> {
+  static async createGroupChat(
+    name: string,
+    description: string,
+    memberIds: string[],
+  ): Promise<ChatRoom | null> {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) return null;
 
       const { data: room, error: roomError } = await supabase
@@ -176,7 +195,7 @@ export class ChatService {
           name,
           description,
           room_type: 'group',
-          created_by: user.id
+          created_by: user.id,
         })
         .select()
         .single();
@@ -184,8 +203,16 @@ export class ChatService {
       if (roomError) throw roomError;
 
       const members = [
-        { room_id: room.id, user_id: user.id, is_admin: true },
-        ...memberIds.map(id => ({ room_id: room.id, user_id: id, is_admin: false }))
+        {
+          room_id: room.id,
+          user_id: user.id,
+          is_admin: true,
+        },
+        ...memberIds.map((id) => ({
+          room_id: room.id,
+          user_id: id,
+          is_admin: false,
+        })),
       ];
 
       const { error: membersError } = await supabase
@@ -201,7 +228,6 @@ export class ChatService {
     }
   }
 
-  // UPDATED: Improved unread count calculation
   static async getUserChatRooms(userId: string): Promise<ChatRoom[]> {
     try {
       const { data: memberData, error: memberError } = await supabase
@@ -212,8 +238,10 @@ export class ChatService {
       if (memberError) throw memberError;
       if (!memberData || memberData.length === 0) return [];
 
-      const roomIds = memberData.map(m => m.room_id);
-      const lastReadByRoom = new Map(memberData.map(m => [m.room_id, m.last_read_at]));
+      const roomIds = memberData.map((m) => m.room_id);
+      const lastReadByRoom = new Map(
+        memberData.map((m) => [m.room_id, m.last_read_at]),
+      );
 
       const { data: rooms, error: roomsError } = await supabase
         .from('chat_rooms')
@@ -224,7 +252,6 @@ export class ChatService {
 
       const chatRooms: ChatRoom[] = rooms || [];
 
-      // Batch fetch all members and messages
       const [allMembers, lastMessages] = await Promise.all([
         supabase
           .from('room_members')
@@ -234,67 +261,66 @@ export class ChatService {
           .from('chat_messages')
           .select('*')
           .in('room_id', roomIds)
-          .order('created_at', { ascending: false })
+          .order('created_at', { ascending: false }),
       ]);
 
-      // Get all unique user IDs
       const userIds = new Set<string>();
-      allMembers.data?.forEach(m => userIds.add(m.user_id));
-      lastMessages.data?.forEach(m => userIds.add(m.user_id));
 
-      // Batch fetch all profiles
+      allMembers.data?.forEach((m) => userIds.add(m.user_id));
+      lastMessages.data?.forEach((m) => userIds.add(m.user_id));
+
       const profiles = await this.getUsersByIds([...userIds]);
 
-      // Organize members by room
       const membersByRoom = new Map<string, RoomMember[]>();
-      allMembers.data?.forEach(member => {
+
+      allMembers.data?.forEach((member) => {
         if (!membersByRoom.has(member.room_id)) {
           membersByRoom.set(member.room_id, []);
         }
+
         membersByRoom.get(member.room_id)!.push({
           ...member,
-          profile: profiles.get(member.user_id)
+          profile: profiles.get(member.user_id),
         });
       });
 
-      // Organize last messages by room
       const lastMessageByRoom = new Map<string, ChatMessage>();
-      lastMessages.data?.forEach(msg => {
+
+      lastMessages.data?.forEach((msg) => {
         if (!lastMessageByRoom.has(msg.room_id)) {
           lastMessageByRoom.set(msg.room_id, {
             ...msg,
-            profile: profiles.get(msg.user_id)
+            profile: profiles.get(msg.user_id),
           });
         }
       });
 
-      // Calculate unread counts efficiently
       const unreadByRoom = new Map<string, number>();
-      
+
       for (const roomId of roomIds) {
         const lastRead = lastReadByRoom.get(roomId);
+
         if (!lastRead) {
-          // If no last_read_at, count all messages
           const { count } = await supabase
             .from('chat_messages')
             .select('*', { count: 'exact', head: true })
             .eq('room_id', roomId)
-            .neq('user_id', userId); // Don't count own messages
+            .neq('user_id', userId);
+
           unreadByRoom.set(roomId, count || 0);
         } else {
-          // Count messages after last_read_at
           const { count } = await supabase
             .from('chat_messages')
             .select('*', { count: 'exact', head: true })
             .eq('room_id', roomId)
-            .neq('user_id', userId) // Don't count own messages
+            .neq('user_id', userId)
             .gt('created_at', lastRead);
+
           unreadByRoom.set(roomId, count || 0);
         }
       }
 
-      // Attach data to rooms
-      chatRooms.forEach(room => {
+      chatRooms.forEach((room) => {
         room.members = membersByRoom.get(room.id) || [];
         room.last_message = lastMessageByRoom.get(room.id);
         room.unread_count = unreadByRoom.get(room.id) || 0;
@@ -307,7 +333,10 @@ export class ChatService {
     }
   }
 
-  static async getRoomMessages(roomId: string, limit: number = 50): Promise<ChatMessage[]> {
+  static async getRoomMessages(
+    roomId: string,
+    limit: number = 50,
+  ): Promise<ChatMessage[]> {
     try {
       const { data, error } = await supabase
         .from('chat_messages')
@@ -318,12 +347,15 @@ export class ChatService {
 
       if (error) throw error;
 
-      const userIds = [...new Set(data?.map(m => m.user_id) || [])];
+      const userIds = [
+        ...new Set(data?.map((m) => m.user_id) || []),
+      ];
+
       const profiles = await this.getUsersByIds(userIds);
 
-      const messages = (data || []).map(msg => ({
+      const messages = (data || []).map((msg) => ({
         ...msg,
-        profile: profiles.get(msg.user_id)
+        profile: profiles.get(msg.user_id),
       }));
 
       return messages.reverse();
@@ -333,9 +365,16 @@ export class ChatService {
     }
   }
 
-  static async sendMessage(roomId: string, text: string, repliedTo?: string): Promise<ChatMessage | null> {
+  static async sendMessage(
+    roomId: string,
+    text: string,
+    repliedTo?: string,
+  ): Promise<ChatMessage | null> {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) return null;
 
       const { data, error } = await supabase
@@ -345,7 +384,7 @@ export class ChatService {
           user_id: user.id,
           message_text: text,
           message_type: 'text',
-          replied_to: repliedTo
+          replied_to: repliedTo,
         })
         .select()
         .single();
@@ -353,30 +392,43 @@ export class ChatService {
       if (error) throw error;
 
       const profile = await this.getUserById(user.id);
-      return { ...data, profile: profile || undefined };
+
+      return {
+        ...data,
+        profile: profile || undefined,
+      };
     } catch (error) {
       console.error('Error sending message:', error);
       return null;
     }
   }
 
-  static async uploadMedia(uri: string, type: 'image' | 'video', roomId: string): Promise<string | null> {
+  static async uploadMedia(
+    uri: string,
+    type: 'image' | 'video',
+    roomId: string,
+  ): Promise<string | null> {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) return null;
 
       const response = await fetch(uri);
       const blob = await response.blob();
-      
-      const fileExt = uri.split('.').pop() || (type === 'image' ? 'jpg' : 'mp4');
+
+      const fileExt =
+        uri.split('.').pop() || (type === 'image' ? 'jpg' : 'mp4');
+
       const fileName = `${user.id}/${roomId}/${Date.now()}.${fileExt}`;
       const filePath = `chat-media/${fileName}`;
 
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('chat-media')
         .upload(filePath, blob, {
           contentType: type === 'image' ? 'image/jpeg' : 'video/mp4',
-          upsert: false
+          upsert: false,
         });
 
       if (error) throw error;
@@ -392,7 +444,10 @@ export class ChatService {
     }
   }
 
-  static async sendImage(roomId: string, caption?: string): Promise<ChatMessage | null> {
+  static async sendImage(
+    roomId: string,
+    caption?: string,
+  ): Promise<ChatMessage | null> {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -402,10 +457,18 @@ export class ChatService {
 
       if (result.canceled) return null;
 
-      const mediaUrl = await this.uploadMedia(result.assets[0].uri, 'image', roomId);
+      const mediaUrl = await this.uploadMedia(
+        result.assets[0].uri,
+        'image',
+        roomId,
+      );
+
       if (!mediaUrl) return null;
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) return null;
 
       const { data, error } = await supabase
@@ -416,7 +479,7 @@ export class ChatService {
           message_text: caption || null,
           message_type: 'image',
           media_url: mediaUrl,
-          media_size: result.assets[0].fileSize || 0
+          media_size: result.assets[0].fileSize || 0,
         })
         .select()
         .single();
@@ -424,14 +487,21 @@ export class ChatService {
       if (error) throw error;
 
       const profile = await this.getUserById(user.id);
-      return { ...data, profile: profile || undefined };
+
+      return {
+        ...data,
+        profile: profile || undefined,
+      };
     } catch (error) {
       console.error('Error sending image:', error);
       return null;
     }
   }
 
-  static async sendVideo(roomId: string, caption?: string): Promise<ChatMessage | null> {
+  static async sendVideo(
+    roomId: string,
+    caption?: string,
+  ): Promise<ChatMessage | null> {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Videos,
@@ -442,10 +512,18 @@ export class ChatService {
 
       if (result.canceled) return null;
 
-      const mediaUrl = await this.uploadMedia(result.assets[0].uri, 'video', roomId);
+      const mediaUrl = await this.uploadMedia(
+        result.assets[0].uri,
+        'video',
+        roomId,
+      );
+
       if (!mediaUrl) return null;
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) return null;
 
       const { data, error } = await supabase
@@ -456,7 +534,7 @@ export class ChatService {
           message_text: caption || null,
           message_type: 'video',
           media_url: mediaUrl,
-          media_size: result.assets[0].fileSize || 0
+          media_size: result.assets[0].fileSize || 0,
         })
         .select()
         .single();
@@ -464,14 +542,21 @@ export class ChatService {
       if (error) throw error;
 
       const profile = await this.getUserById(user.id);
-      return { ...data, profile: profile || undefined };
+
+      return {
+        ...data,
+        profile: profile || undefined,
+      };
     } catch (error) {
       console.error('Error sending video:', error);
       return null;
     }
   }
 
-  static subscribeToMessages(roomId: string, callback: (message: ChatMessage) => void) {
+  static subscribeToMessages(
+    roomId: string,
+    callback: (message: ChatMessage) => void,
+  ) {
     return supabase
       .channel(`room:${roomId}`)
       .on(
@@ -480,7 +565,7 @@ export class ChatService {
           event: 'INSERT',
           schema: 'public',
           table: 'chat_messages',
-          filter: `room_id=eq.${roomId}`
+          filter: `room_id=eq.${roomId}`,
         },
         async (payload) => {
           const { data } = await supabase
@@ -491,21 +576,27 @@ export class ChatService {
 
           if (data) {
             const profile = await this.getUserById(data.user_id);
-            callback({ ...data, profile: profile || undefined });
+
+            callback({
+              ...data,
+              profile: profile || undefined,
+            });
           }
-        }
+        },
       )
       .subscribe();
   }
 
-  // UPDATED: Mark room as read with current timestamp
   static async markRoomAsRead(roomId: string): Promise<void> {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) return;
 
       const now = new Date().toISOString();
-      
+
       await supabase
         .from('room_members')
         .update({ last_read_at: now })
@@ -527,12 +618,12 @@ export class ChatService {
 
       if (error) throw error;
 
-      const userIds = data?.map(m => m.user_id) || [];
+      const userIds = data?.map((m) => m.user_id) || [];
       const profiles = await this.getUsersByIds(userIds);
 
-      return (data || []).map(member => ({
+      return (data || []).map((member) => ({
         ...member,
-        profile: profiles.get(member.user_id)
+        profile: profiles.get(member.user_id),
       }));
     } catch (error) {
       console.error('Error getting room members:', error);
@@ -540,17 +631,21 @@ export class ChatService {
     }
   }
 
-  static async addMemberToRoom(roomId: string, userId: string): Promise<boolean> {
+  static async addMemberToRoom(
+    roomId: string,
+    userId: string,
+  ): Promise<boolean> {
     try {
       const { error } = await supabase
         .from('room_members')
         .insert({
           room_id: roomId,
           user_id: userId,
-          is_admin: false
+          is_admin: false,
         });
 
       if (error) throw error;
+
       return true;
     } catch (error) {
       console.error('Error adding member:', error);
@@ -558,7 +653,10 @@ export class ChatService {
     }
   }
 
-  static async removeMemberFromRoom(roomId: string, userId: string): Promise<boolean> {
+  static async removeMemberFromRoom(
+    roomId: string,
+    userId: string,
+  ): Promise<boolean> {
     try {
       const { error } = await supabase
         .from('room_members')
@@ -567,6 +665,7 @@ export class ChatService {
         .eq('user_id', userId);
 
       if (error) throw error;
+
       return true;
     } catch (error) {
       console.error('Error removing member:', error);
@@ -574,7 +673,9 @@ export class ChatService {
     }
   }
 
-  static async getContactStatuses(userId: string): Promise<StatusUpdate[]> {
+  static async getContactStatuses(
+    userId: string,
+  ): Promise<StatusUpdate[]> {
     try {
       const { data, error } = await supabase
         .from('status_updates')
@@ -584,22 +685,28 @@ export class ChatService {
 
       if (error) throw error;
 
-      const userIds = [...new Set(data?.map(s => s.user_id) || [])];
+      const userIds = [
+        ...new Set(data?.map((s) => s.user_id) || []),
+      ];
+
       const profiles = await this.getUsersByIds(userIds);
 
-      const statusIds = data?.map(s => s.id) || [];
+      const statusIds = data?.map((s) => s.id) || [];
+
       const { data: viewsData } = await supabase
         .from('status_views')
         .select('status_id')
         .eq('viewer_id', userId)
         .in('status_id', statusIds);
 
-      const viewedStatusIds = new Set(viewsData?.map(v => v.status_id) || []);
+      const viewedStatusIds = new Set(
+        viewsData?.map((v) => v.status_id) || [],
+      );
 
-      return (data || []).map(status => ({
+      return (data || []).map((status) => ({
         ...status,
         profile: profiles.get(status.user_id),
-        has_viewed: viewedStatusIds.has(status.id)
+        has_viewed: viewedStatusIds.has(status.id),
       }));
     } catch (error) {
       console.error('Error getting statuses:', error);
@@ -607,12 +714,16 @@ export class ChatService {
     }
   }
 
-  static async createStatus(caption: string, mediaType: 'image' | 'video'): Promise<StatusUpdate | null> {
+  static async createStatus(
+    caption: string,
+    mediaType: 'image' | 'video',
+  ): Promise<StatusUpdate | null> {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: mediaType === 'image' 
-          ? ImagePicker.MediaTypeOptions.Images 
-          : ImagePicker.MediaTypeOptions.Videos,
+        mediaTypes:
+          mediaType === 'image'
+            ? ImagePicker.MediaTypeOptions.Images
+            : ImagePicker.MediaTypeOptions.Videos,
         allowsEditing: true,
         quality: 0.8,
         videoMaxDuration: 30,
@@ -620,10 +731,18 @@ export class ChatService {
 
       if (result.canceled) return null;
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) return null;
 
-      const mediaUrl = await this.uploadMedia(result.assets[0].uri, mediaType, 'status');
+      const mediaUrl = await this.uploadMedia(
+        result.assets[0].uri,
+        mediaType,
+        'status',
+      );
+
       if (!mediaUrl) return null;
 
       const { data, error } = await supabase
@@ -632,7 +751,7 @@ export class ChatService {
           user_id: user.id,
           media_url: mediaUrl,
           media_type: mediaType,
-          caption
+          caption,
         })
         .select()
         .single();
@@ -640,7 +759,11 @@ export class ChatService {
       if (error) throw error;
 
       const profile = await this.getUserById(user.id);
-      return { ...data, profile: profile || undefined };
+
+      return {
+        ...data,
+        profile: profile || undefined,
+      };
     } catch (error) {
       console.error('Error creating status:', error);
       return null;
@@ -649,14 +772,17 @@ export class ChatService {
 
   static async viewStatus(statusId: string): Promise<void> {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) return;
 
       await supabase
         .from('status_views')
         .upsert({
           status_id: statusId,
-          viewer_id: user.id
+          viewer_id: user.id,
         });
 
       const { data: status } = await supabase
@@ -668,7 +794,9 @@ export class ChatService {
       if (status) {
         await supabase
           .from('status_updates')
-          .update({ views_count: (status.views_count || 0) + 1 })
+          .update({
+            views_count: (status.views_count || 0) + 1,
+          })
           .eq('id', statusId);
       }
     } catch (error) {
@@ -676,3 +804,4 @@ export class ChatService {
     }
   }
 }
+

@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
@@ -16,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { getLocalBookById, saveLocalBook } from '@/lib/localBooks';
 import { LocalBook } from '@/lib/local-books-type';
-import PdfViewer from '@/components/reader/PdfViewer'; // Import the PDF viewer
+import PdfViewer from '@/components/reader/PdfViewer';
 
 export default function ReaderScreen() {
   const router = useRouter();
@@ -27,39 +28,45 @@ export default function ReaderScreen() {
   const [currentPage, setCurrentPage] = useState(0);
   const [pages, setPages] = useState<string[]>([]);
   const [error, setError] = useState<string>('');
-  
-  // For PDF rendering
+
   const [isPdf, setIsPdf] = useState(false);
   const [pdfUri, setPdfUri] = useState<string>('');
-  
-  // Swipe gesture handling
+
   const pan = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
 
-  // Swipe gesture handler
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => !isPdf, // Disable for PDF
+      onStartShouldSetPanResponder: () => !isPdf,
       onMoveShouldSetPanResponder: (_, gestureState) => {
         if (isPdf) return false;
-        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 10;
+        return (
+          Math.abs(gestureState.dx) > Math.abs(gestureState.dy) &&
+          Math.abs(gestureState.dx) > 10
+        );
       },
       onPanResponderMove: (_, gestureState) => {
-        if ((currentPage === 0 && gestureState.dx > 0) || 
-            (currentPage >= pages.length - 1 && gestureState.dx < 0)) {
+        if (
+          (currentPage === 0 && gestureState.dx > 0) ||
+          (currentPage >= pages.length - 1 && gestureState.dx < 0)
+        ) {
           return;
         }
+
         pan.setValue(gestureState.dx);
-        
+
         const fadeValue = 1 - Math.abs(gestureState.dx) / 300;
         opacity.setValue(Math.max(0.3, fadeValue));
       },
       onPanResponderRelease: (_, gestureState) => {
         const swipeThreshold = 75;
-        
+
         if (gestureState.dx > swipeThreshold && currentPage > 0) {
           animatePageChange(() => handlePreviousPage());
-        } else if (gestureState.dx < -swipeThreshold && currentPage < pages.length - 1) {
+        } else if (
+          gestureState.dx < -swipeThreshold &&
+          currentPage < pages.length - 1
+        ) {
           animatePageChange(() => handleNextPage());
         } else {
           Animated.parallel([
@@ -76,7 +83,7 @@ export default function ReaderScreen() {
           ]).start();
         }
       },
-    })
+    }),
   ).current;
 
   const animatePageChange = (callback: () => void) => {
@@ -110,7 +117,7 @@ export default function ReaderScreen() {
 
     try {
       const bookData = await getLocalBookById(bookId);
-      
+
       if (!bookData) {
         setError('Book not found in library');
         setLoading(false);
@@ -119,10 +126,10 @@ export default function ReaderScreen() {
 
       setBook(bookData);
       await readFileContent(bookData);
-      
     } catch (error) {
       console.error('Error loading book:', error);
-      setError(`Error loading book: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      setError(`Error loading book: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -132,104 +139,114 @@ export default function ReaderScreen() {
     try {
       const { fileUri, mimeType } = bookData;
 
-      // Check if it's a PDF
       if (mimeType === 'application/pdf' || fileUri.endsWith('.pdf')) {
         setIsPdf(true);
         setPdfUri(fileUri);
-        
-        // For progress tracking, we'll use dummy pages
-        // The actual page tracking will be handled by the PDF viewer
-        const dummyPages = Array(100).fill('PDF Page'); // Assume 100 pages
+
+        const dummyPages = Array(100).fill('PDF Page');
         setPages(dummyPages);
-        
-        const startPage = bookData.progress 
+
+        const startPage = bookData.progress
           ? Math.round(bookData.progress * dummyPages.length)
           : 0;
+
         setCurrentPage(Math.min(startPage, dummyPages.length - 1));
-        
+
         return;
       }
 
-      // Handle text files
       if (mimeType === 'text/plain' || fileUri.endsWith('.txt')) {
         let content: string;
-        
-        if (fileUri.startsWith('content://') || fileUri.startsWith('file://')) {
+
+        if (
+          fileUri.startsWith('content://') ||
+          fileUri.startsWith('file://')
+        ) {
           const response = await fetch(fileUri);
           content = await response.text();
         } else {
           const response = await fetch(fileUri);
           content = await response.text();
         }
-        
+
         const pagesArray = splitIntoPages(content, 1000);
         setPages(pagesArray);
         setFileContent(content);
-        
-        const startPage = bookData.progress 
+
+        const startPage = bookData.progress
           ? Math.round(bookData.progress * pagesArray.length)
           : 0;
+
         setCurrentPage(Math.min(startPage, pagesArray.length - 1));
-        
-      } else if (mimeType === 'application/epub+zip' || fileUri.endsWith('.epub')) {
+      } else if (
+        mimeType === 'application/epub+zip' ||
+        fileUri.endsWith('.epub')
+      ) {
         const epubPages = [
-          'EPUB Preview', 
-          'This is an EPUB file. EPUB rendering requires @epubjs-react-native/core library.', 
-          'Install: npm install @epubjs-react-native/core', 
+          'EPUB Preview',
+          'This is an EPUB file. EPUB rendering requires @epubjs-react-native/core library.',
+          'Install: npm install @epubjs-react-native/core',
           'Then implement proper EPUB rendering.',
           '',
-          'File location: ' + fileUri
+          'File location: ' + fileUri,
         ];
+
         setPages(epubPages);
         setFileContent('EPUB file loaded from: ' + fileUri);
-        
-        const startPage = bookData.progress 
+
+        const startPage = bookData.progress
           ? Math.round(bookData.progress * epubPages.length)
           : 0;
+
         setCurrentPage(Math.min(startPage, epubPages.length - 1));
-        
       } else {
         throw new Error(`Unsupported file type: ${mimeType}`);
       }
-
     } catch (error) {
       console.error('Error reading file:', error);
-      
-      if (error.message?.includes('no longer exists') || error.message?.includes('not found')) {
+
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (
+        message.includes('no longer exists') ||
+        message.includes('not found')
+      ) {
         Alert.alert(
           'File Not Found',
           'The original file has been moved or deleted. Please re-add it to your library.',
-          [{ text: 'OK', onPress: () => router.back() }]
+          [{ text: 'OK', onPress: () => router.back() }],
         );
-      } else if (error.message?.includes('Failed to fetch')) {
+      } else if (message.includes('Failed to fetch')) {
         Alert.alert(
           'File Access Error',
           'Unable to access the file. It may have been moved or you may need to grant permissions.',
-          [{ text: 'OK', onPress: () => router.back() }]
+          [{ text: 'OK', onPress: () => router.back() }],
         );
       }
-      
+
       throw error;
     }
   };
 
   const splitIntoPages = (text: string, charsPerPage: number): string[] => {
     const pages = [];
+
     for (let i = 0; i < text.length; i += charsPerPage) {
       pages.push(text.substring(i, i + charsPerPage));
     }
+
     return pages.length > 0 ? pages : [''];
   };
 
   const updateProgress = async (page: number) => {
     if (!book || pages.length === 0) return;
-    
+
     const progress = page / pages.length;
     const updatedBook = { ...book, progress };
-    
+
     setBook(updatedBook);
     setCurrentPage(page);
-    
+
     try {
       await saveLocalBook(updatedBook);
     } catch (error) {
@@ -262,10 +279,13 @@ export default function ReaderScreen() {
     return (
       <SafeAreaView style={styles.centerContainer} edges={['top']}>
         <Text style={styles.errorTitle}>📚 Book Not Found</Text>
+
         <Text style={styles.errorText}>
-          {error || 'The book you\'re looking for doesn\'t exist or has been deleted.'}
+          {error ||
+            "The book you're looking for doesn't exist or has been deleted."}
         </Text>
-        <TouchableOpacity 
+
+        <TouchableOpacity
           style={styles.backToLibraryButton}
           onPress={() => router.back()}
         >
@@ -276,27 +296,35 @@ export default function ReaderScreen() {
   }
 
   const totalPages = pages.length;
-  const progressPercentage = totalPages > 0 ? (currentPage / totalPages) * 100 : 0;
+  const progressPercentage =
+    totalPages > 0 ? (currentPage / totalPages) * 100 : 0;
 
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
             <ArrowLeft size={24} color="#1a1a1a" />
           </TouchableOpacity>
+
           <View style={styles.headerInfo}>
             <Text style={styles.bookTitle} numberOfLines={1}>
               {book.title}
             </Text>
+
             <Text style={styles.pageInfo}>
-              {isPdf ? 'PDF Document' : `Page ${currentPage + 1} of ${totalPages}`}
+              {isPdf
+                ? 'PDF Document'
+                : `Page ${currentPage + 1} of ${totalPages}`}
             </Text>
           </View>
+
           <View style={styles.placeholder} />
         </View>
 
-        {/* Render PDF viewer for PDFs */}
         {isPdf ? (
           <PdfViewer
             source={{ uri: pdfUri }}
@@ -305,8 +333,10 @@ export default function ReaderScreen() {
             onError={(error) => console.error('PDF error:', error)}
           />
         ) : (
-          // Render text content for non-PDF files
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+          >
             <Animated.View
               style={{
                 opacity: opacity,
@@ -321,7 +351,6 @@ export default function ReaderScreen() {
           </ScrollView>
         )}
 
-        {/* Only show footer controls for non-PDF files */}
         {!isPdf && (
           <View style={styles.footer}>
             <View style={styles.progressBar}>
@@ -352,6 +381,7 @@ export default function ReaderScreen() {
                   size={24}
                   color={currentPage === 0 ? '#ccc' : '#007AFF'}
                 />
+
                 <Text
                   style={[
                     styles.controlText,
@@ -371,20 +401,25 @@ export default function ReaderScreen() {
                 disabled={currentPage >= totalPages - 1}
                 style={[
                   styles.controlButton,
-                  currentPage >= totalPages - 1 && styles.controlButtonDisabled,
+                  currentPage >= totalPages - 1 &&
+                    styles.controlButtonDisabled,
                 ]}
               >
                 <Text
                   style={[
                     styles.controlText,
-                    currentPage >= totalPages - 1 && styles.controlTextDisabled,
+                    currentPage >= totalPages - 1 &&
+                      styles.controlTextDisabled,
                   ]}
                 >
                   Next
                 </Text>
+
                 <ChevronRight
                   size={24}
-                  color={currentPage >= totalPages - 1 ? '#ccc' : '#007AFF'}
+                  color={
+                    currentPage >= totalPages - 1 ? '#ccc' : '#007AFF'
+                  }
                 />
               </TouchableOpacity>
             </View>
