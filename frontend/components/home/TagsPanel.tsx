@@ -1,7 +1,5 @@
-// components/home/TagBooksPanel.tsx
-// Renders one BookSection per TagSection entry.
-// Parent computes tagSections from fetched data and passes them in.
-import React, { memo, useCallback } from 'react';
+// components/home/TagsPanel.tsx
+import React, { memo } from 'react';
 import { View } from 'react-native';
 import BookSection from './BookSection';
 import { Novel, Tag, TagSection } from '@/types/home';
@@ -14,22 +12,17 @@ interface TagBooksPanelProps {
   theme: any;
 }
 
-const TagBooksPanel = memo(({
-  tagSections,
-  onBookPress,
-  onBookLongPress,
-  onSeeAll,
-  theme,
-}: TagBooksPanelProps) => (
+const TagBooksPanel = memo(({ tagSections, onBookPress, onBookLongPress, onSeeAll, theme }: TagBooksPanelProps) => (
   <View>
-    {tagSections.map((section) => (
+    {tagSections.map(section => (
       <BookSection
         key={section.tag.id}
-        tag={section.tag}
+        label={section.label}
+        category={section.tag.slug}
         books={section.books}
         onBookPress={onBookPress}
         onBookLongPress={onBookLongPress}
-        onSeeAll={onSeeAll}
+        onSeeAll={() => onSeeAll(section.tag)}
         theme={theme}
       />
     ))}
