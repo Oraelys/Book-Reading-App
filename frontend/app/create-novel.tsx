@@ -1,159 +1,428 @@
 // app/create-novel.tsx
-import React, { useState, useCallback, useMemo } from 'react';
+
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+} from 'react';
+
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator,
-  Platform, KeyboardAvoidingView,
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { ChevronRight } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
-import { useTheme } from '@/contexts/ThemeContexts';
+
+import {
+  SafeAreaView,
+} from 'react-native-safe-area-context';
+
+import {
+  useRouter,
+} from 'expo-router';
+
+import {
+  ChevronRight,
+} from 'lucide-react-native';
+
+import {
+  supabase,
+} from '@/lib/supabase';
+
+import {
+  useTheme,
+} from '@/contexts/ThemeContexts';
+
+import {
+  apiRequest,
+} from '@/lib/api';
 
 import ScreenHeader from '@/components/author/ScreenHeader';
+
 import CreateStoryForm, {
-  NovelDraft, EMPTY_NOVEL_DRAFT, isNovelDraftEmpty,
+  NovelDraft,
+  EMPTY_NOVEL_DRAFT,
+  isNovelDraftEmpty,
 } from '@/components/author/CreateStoryForm';
-
-// ---------------------------------------------------------------------------
-// Cover upload helper
-// ---------------------------------------------------------------------------
-async function uploadCoverImage(uri: string, userId: string): Promise<string | null> {
-  try {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const arrayBuffer = await new Response(blob).arrayBuffer();
-    const fileExt = (uri.split('.').pop() || 'jpg').toLowerCase().split('?')[0];
-    const fileName = `${userId}/${Date.now()}.${fileExt}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('covers')
-      .upload(fileName, arrayBuffer, {
-        contentType: `image/${fileExt}`,
-        upsert: true,
-      });
-
-    if (uploadError) {
-      console.warn('[CreateNovel] uploadCoverImage:', uploadError.message);
-      return null;
-    }
-
-    const { data } = supabase.storage.from('covers').getPublicUrl(fileName);
-    return data?.publicUrl ?? null;
-  } catch (e) {
-    console.warn('[CreateNovel] uploadCoverImage:', e);
-    return null;
-  }
-}
 
 export default function CreateNovelScreen() {
   const router = useRouter();
-  const { user } = useAuth();
-  const { theme, isDark } = useTheme();
 
-  const [draft, setDraft] = useState<NovelDraft>(EMPTY_NOVEL_DRAFT);
-  const [submitting, setSubmitting] = useState(false);
-  const [titleError, setTitleError] = useState<string | undefined>();
+  const {
+    theme,
+    isDark,
+  } = useTheme();
 
-  const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+  const [
+    draft,
+    setDraft,
+  ] = useState<NovelDraft>(
+    EMPTY_NOVEL_DRAFT,
+  );
 
-  // Step 1 behavior: empty draft -> "Skip", anything filled in -> "Next"
-  const isEmpty = useMemo(() => isNovelDraftEmpty(draft), [draft]);
-  const buttonLabel = isEmpty ? 'Skip' : 'Next';
+  const [
+    submitting,
+    setSubmitting,
+  ] = useState(false);
 
-  const handleDraftChange = useCallback((patch: Partial<NovelDraft>) => {
-    setDraft(prev => ({ ...prev, ...patch }));
-    if (patch.title !== undefined) setTitleError(undefined);
-  }, []);
+  const [
+    titleError,
+    setTitleError,
+  ] = useState<string | undefined>();
+
+  const styles = useMemo(
+    () =>
+      getStyles(
+        theme,
+        isDark,
+      ),
+    [
+      theme,
+      isDark,
+    ],
+  );
 
   // ---------------------------------------------------------------------------
-  // Step 1 -> Step 2
-  // The story is created HERE — once, as a draft row — and its id is handed
-  // to WritingEditorScreen via route params. The editor never inserts into
-  // `novels`; it only ever reads/writes chapters that belong to this id.
-  // Works identically whether the user hits "Skip" (blank story) or "Next"
-  // (filled-in story).
+  // Step 1 state
   // ---------------------------------------------------------------------------
-  const handleContinue = useCallback(async () => {
-    if (!user || submitting) return;
-    setSubmitting(true);
 
-    try {
-      let coverUrl: string | null = null;
-      if (draft.coverImageUri) {
-        coverUrl = await uploadCoverImage(draft.coverImageUri, user.id);
-      }
+  const isEmpty = useMemo(
+    () =>
+      isNovelDraftEmpty(
+        draft,
+      ),
+    [draft],
+  );
 
-      const title = draft.title.trim() || 'Untitled Story';
+  const buttonLabel =
+    isEmpty
+      ? 'Skip'
+      : 'Next';
 
-      const { data: novelRow, error: insertError } = await supabase
-        .from('novels')
-        .insert({
-          title,
-          description: draft.description.trim() || null,
-          cover_image_url: coverUrl,
-          created_by: user.id,
-          status: 'draft',
-        })
-        .select('id')
-        .single();
+  const handleDraftChange =
+    useCallback(
+      (
+        patch: Partial<NovelDraft>,
+      ) => {
+        setDraft(
+          previous => ({
+            ...previous,
+            ...patch,
+          }),
+        );
 
-      if (insertError || !novelRow) {
-        console.warn('[CreateNovel] insert novel:', insertError?.message);
-        return;
-      }
+        if (
+          patch.title !== undefined
+        ) {
+          setTitleError(
+            undefined,
+          );
+        }
+      },
+      [],
+    );
 
-      router.replace({
-        pathname: '/writing-editor',
-        params: { novelId: novelRow.id, title },
-      } as any);
-    } catch (e) {
-      console.warn('[CreateNovel] handleContinue:', e);
-    } finally {
-      setSubmitting(false);
-    }
-  }, [user, submitting, draft, router]);
+  // ---------------------------------------------------------------------------
+  // Create story
+  //
+  // IMPORTANT:
+  // Story creation now goes through NestJS.
+  //
+  // The frontend no longer inserts directly into `novels`.
+  // The backend derives `created_by` from the authenticated JWT.
+  // ---------------------------------------------------------------------------
+
+  const handleContinue =
+    useCallback(
+      async () => {
+        if (submitting) {
+          return;
+        }
+
+        const title =
+          draft.title.trim();
+
+        if (!title) {
+          setTitleError(
+            'Please give your story a title.',
+          );
+          return;
+        }
+
+        setSubmitting(true);
+
+        try {
+          let coverUrl:
+            string | undefined;
+
+          /*
+           * Cover handling remains unchanged for now.
+           *
+           * We will move cover uploads behind the backend upload
+           * boundary as part of the upload/media phase.
+           */
+          if (
+            draft.coverImageUri
+          ) {
+            try {
+              const response =
+                await fetch(
+                  draft.coverImageUri,
+                );
+
+              const blob =
+                await response.blob();
+
+              const arrayBuffer =
+                await new Response(
+                  blob,
+                ).arrayBuffer();
+
+              const extension =
+                (
+                  draft
+                    .coverImageUri
+                    .split('.')
+                    .pop() ||
+                  'jpg'
+                )
+                  .toLowerCase()
+                  .split('?')[0];
+
+              /*
+               * The current storage layout is retained temporarily.
+               * This will be centralized later.
+               */
+              const fileName =
+                `covers/${Date.now()}.${extension}`;
+
+              const {
+                error:
+                  uploadError,
+              } =
+                await supabase.storage
+                  .from('covers')
+                  .upload(
+                    fileName,
+                    arrayBuffer,
+                    {
+                      contentType:
+                        `image/${extension}`,
+                      upsert: true,
+                    },
+                  );
+
+              if (
+                !uploadError
+              ) {
+                const {
+                  data,
+                } =
+                  supabase.storage
+                    .from('covers')
+                    .getPublicUrl(
+                      fileName,
+                    );
+
+                coverUrl =
+                  data?.publicUrl ||
+                  undefined;
+              } else {
+                console.warn(
+                  '[CreateNovel] cover upload:',
+                  uploadError.message,
+                );
+              }
+            } catch (error) {
+              console.warn(
+                '[CreateNovel] cover upload:',
+                error,
+              );
+            }
+          }
+
+          /*
+           * IMPORTANT:
+           *
+           * authorId is deliberately NOT taken from the client.
+           * The backend receives the authenticated access token and
+           * derives created_by from request.user.id.
+           */
+          const story =
+            await apiRequest<{
+              id: string;
+              title: string;
+              description: string | null;
+              cover_image_url: string | null;
+              created_by: string;
+              status: string;
+            }>(
+              '/writing/stories',
+              {
+                method: 'POST',
+
+                body: JSON.stringify({
+                  title,
+                  description:
+                    draft.description.trim() ||
+                    undefined,
+
+                  coverImage:
+                    coverUrl,
+
+                  /*
+                   * These are defaults because the current
+                   * CreateStoryForm does not expose category/
+                   * visibility yet.
+                   *
+                   * We will add those fields in the story
+                   * metadata phase.
+                   */
+                  category: 'General',
+
+                  visibility: 'private',
+                }),
+              },
+            );
+
+          if (!story?.id) {
+            throw new Error(
+              'Story creation returned no story ID.',
+            );
+          }
+
+          router.replace({
+            pathname:
+              '/writing-editor',
+
+            params: {
+              novelId:
+                story.id,
+
+              title:
+                story.title ||
+                title,
+            },
+          } as any);
+        } catch (error) {
+          console.warn(
+            '[CreateNovel] create story:',
+            error,
+          );
+
+          const message =
+            error instanceof Error
+              ? error.message
+              : String(error);
+
+          setTitleError(
+            message ||
+              'Unable to create story. Please try again.',
+          );
+        } finally {
+          setSubmitting(false);
+        }
+      },
+      [
+        submitting,
+        draft,
+        router,
+      ],
+    );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      <ScreenHeader title="New Story" theme={theme} />
+    <SafeAreaView
+      style={[
+        styles.container,
+        {
+          backgroundColor:
+            theme.background,
+        },
+      ]}
+      edges={['top']}
+    >
+      <ScreenHeader
+        title="New Story"
+        theme={theme}
+      />
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={
+          Platform.OS === 'ios'
+            ? 'padding'
+            : undefined
+        }
         keyboardVerticalOffset={90}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
+          contentContainerStyle={
+            styles.scrollContent
+          }
+          showsVerticalScrollIndicator={
+            false
+          }
           keyboardShouldPersistTaps="handled"
         >
           <CreateStoryForm
             draft={draft}
-            onChange={handleDraftChange}
+            onChange={
+              handleDraftChange
+            }
             theme={theme}
             isDark={isDark}
-            titleError={titleError}
+            titleError={
+              titleError
+            }
           />
         </ScrollView>
 
-        <View style={styles.footer} pointerEvents="box-none">
+        <View
+          style={styles.footer}
+          pointerEvents="box-none"
+        >
           <Pressable
-            onPress={handleContinue}
-            disabled={submitting}
+            onPress={
+              handleContinue
+            }
+            disabled={
+              submitting
+            }
             style={[
               styles.continueButton,
-              { backgroundColor: theme.primary },
-              submitting && styles.buttonDisabled,
+              {
+                backgroundColor:
+                  theme.primary,
+              },
+              submitting &&
+                styles.buttonDisabled,
             ]}
           >
             {submitting ? (
-              <ActivityIndicator size="small" color="#FFF" />
+              <ActivityIndicator
+                size="small"
+                color="#FFF"
+              />
             ) : (
               <>
-                <Text style={styles.continueLabel}>{buttonLabel}</Text>
-                <ChevronRight size={18} color="#FFF" />
+                <Text
+                  style={
+                    styles.continueLabel
+                  }
+                >
+                  {
+                    buttonLabel
+                  }
+                </Text>
+
+                <ChevronRight
+                  size={18}
+                  color="#FFF"
+                />
               </>
             )}
           </Pressable>
@@ -163,20 +432,31 @@ export default function CreateNovelScreen() {
   );
 }
 
-const getStyles = (theme: any, _isDark: boolean) =>
+const getStyles = (
+  theme: any,
+  _isDark: boolean,
+) =>
   StyleSheet.create({
-    container: { flex: 1 },
-    flex: { flex: 1 },
+    container: {
+      flex: 1,
+    },
+
+    flex: {
+      flex: 1,
+    },
+
     scrollContent: {
       paddingHorizontal: 20,
       paddingTop: 24,
       paddingBottom: 100,
     },
+
     footer: {
       position: 'absolute',
       bottom: 20,
       right: 20,
     },
+
     continueButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -184,18 +464,28 @@ const getStyles = (theme: any, _isDark: boolean) =>
       paddingHorizontal: 22,
       paddingVertical: 14,
       borderRadius: 28,
+
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
+      shadowOffset: {
+        width: 0,
+        height: 4,
+      },
       shadowOpacity: 0.15,
       shadowRadius: 8,
+
       elevation: 4,
+
       minWidth: 100,
       justifyContent: 'center',
     },
+
     continueLabel: {
       color: '#FFF',
       fontSize: 15,
       fontWeight: '700',
     },
-    buttonDisabled: { opacity: 0.6 },
+
+    buttonDisabled: {
+      opacity: 0.6,
+    },
   });
