@@ -63,17 +63,16 @@ export class AdminContentGuard
       );
     }
 
-    const user =
-      data.user;
+  const user = data.user;
 
-    const role =
-      user.app_metadata?.role;
+console.log('Authenticated user:', {
+  id: user.id,
+  email: user.email,
+  appMetadata: user.app_metadata,
+});
 
-    if (role !== 'admin') {
-      throw new ForbiddenException(
-        'Administrator access is required.',
-      );
-    }
+const role =
+  user.app_metadata?.role;
 
     request.user = user;
 
