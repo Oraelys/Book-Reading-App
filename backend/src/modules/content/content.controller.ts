@@ -1,4 +1,6 @@
+
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -6,8 +8,14 @@ import {
   ParseIntPipe,
   Post,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+
+import {
+  FileInterceptor,
+} from '@nestjs/platform-express';
 
 import {
   ContentService,
@@ -21,6 +29,10 @@ import {
   WritingAuthorizationService,
 } from '../writing/services/writing-authorization.service';
 
+import {
+  AdminContentGuard,
+} from './guards/admin-content.guard';
+
 @Controller('content')
 export class ContentController {
   constructor(
@@ -33,33 +45,66 @@ export class ContentController {
 
   /*
    * ============================
-   * AUTHOR / PROCESSING
+   * ADMIN BOOK IMPORT
    * ============================
+   *
+   * Only administrators may
+   * introduce manuscript files.
+   *
+   * The administrator performing
+   * the import is NOT automatically
+   * treated as the book's author.
    */
 
-  @Post('upload')
-  @UseGuards(WritingAuthGuard)
-  async upload(
+  @Post('admin/import')
+  @UseGuards(AdminContentGuard)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: {
+        fileSize:
+          50 * 1024 * 1024,
+      },
+    }),
+  )
+  async importBook(
+    @UploadedFile()
+    file: any,
+
     @Body()
     body: {
-      file: string;
       novelId: string;
     },
 
     @Req()
     request: any,
   ) {
-    await this.authorization
-      .assertNovelOwner(
-        body.novelId,
-        request.user.id,
+    if (!file) {
+      throw new BadRequestException(
+        'A manuscript file is required.',
       );
+    }
 
-    return this.content.upload(
-      body.file,
+    if (
+      !body?.novelId ||
+      typeof body.novelId !== 'string'
+    ) {
+      throw new BadRequestException(
+        'novelId is required.',
+      );
+    }
+
+    return this.content.importBook(
+      file,
       body.novelId,
+      request.user.id,
     );
   }
+
+  /*
+   * ============================
+   * PROCESSING JOBS
+   * ============================
+   */
 
   @Get('jobs/:id')
   @UseGuards(WritingAuthGuard)
@@ -299,3 +344,4 @@ export class ContentController {
       );
   }
 }
+

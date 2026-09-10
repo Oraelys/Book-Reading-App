@@ -3,6 +3,10 @@ import {
 } from '@nestjs/common';
 
 import {
+  AdminContentGuard,
+} from './guards/admin-content.guard';
+
+import {
   DatabaseModule,
 } from '../database/database.module';
 
@@ -100,6 +104,8 @@ import {
     ChapterDetectorService,
 
     ChapterSplitterService,
+
+    AdminContentGuard,
   ],
 
   exports: [

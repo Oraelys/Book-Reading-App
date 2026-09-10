@@ -1,6 +1,26 @@
+
 import {
+  BadRequestException,
   Injectable,
 } from '@nestjs/common';
+
+import {
+  randomUUID,
+} from 'crypto';
+
+import {
+  promises as fs,
+} from 'fs';
+
+import {
+  basename,
+  extname,
+  join,
+} from 'path';
+
+import {
+  tmpdir,
+} from 'os';
 
 import {
   ContentPipelineService,
@@ -34,15 +54,119 @@ export class ContentService {
       ChapterPublishService,
   ) {}
 
-  async upload(
-    file: string,
+  /*
+   * ============================
+   * ADMIN BOOK IMPORT
+   * ============================
+   */
+
+  async importBook(
+    file: any,
     novelId: string,
+    importedBy: string,
   ) {
-    return this.pipeline.process(
-      file,
-      novelId,
-    );
+    if (!file?.buffer) {
+      throw new BadRequestException(
+        'Uploaded file is empty.',
+      );
+    }
+
+    if (!novelId?.trim()) {
+      throw new BadRequestException(
+        'novelId is required.',
+      );
+    }
+
+    if (!importedBy?.trim()) {
+      throw new BadRequestException(
+        'Administrator identity is required.',
+      );
+    }
+
+    const originalName =
+      file.originalname ||
+      'manuscript';
+
+    const extension =
+      extname(originalName)
+        .toLowerCase();
+
+    const supportedExtensions =
+      new Set([
+        '.txt',
+        '.docx',
+        '.epub',
+      ]);
+
+    if (
+      !supportedExtensions.has(
+        extension,
+      )
+    ) {
+      throw new BadRequestException(
+        'Unsupported manuscript format. Supported formats are TXT, DOCX, and EPUB.',
+      );
+    }
+
+    const temporaryDirectory =
+      await fs.mkdtemp(
+        join(
+          tmpdir(),
+          'inkwell-admin-import-',
+        ),
+      );
+
+    const temporaryFile =
+      join(
+        temporaryDirectory,
+        `${randomUUID()}${extension}`,
+      );
+
+    try {
+      await fs.writeFile(
+        temporaryFile,
+        file.buffer,
+      );
+
+      /*
+       * The administrator ID is deliberately
+       * not passed to the pipeline as the
+       * novel owner/author.
+       *
+       * It represents only the administrator
+       * performing the import.
+       */
+
+      const result =
+        await this.pipeline.process(
+          temporaryFile,
+          novelId,
+        );
+
+      return {
+        ...result,
+        importedBy,
+        originalFileName:
+          basename(originalName),
+        fileType:
+          extension.substring(1),
+      };
+    } finally {
+      await fs.rm(
+        temporaryDirectory,
+        {
+          recursive: true,
+          force: true,
+        },
+      );
+    }
   }
+
+  /*
+   * ============================
+   * PROCESSING JOBS
+   * ============================
+   */
 
   async getProcessingJob(
     jobId: string,
@@ -108,11 +232,6 @@ export class ContentService {
    * ============================
    * PUBLISHING
    * ============================
-   *
-   * Publishing is delegated to
-   * WritingModule, which is now the
-   * canonical owner of chapter
-   * publication state.
    */
 
   async publishChapter(
@@ -160,3 +279,4 @@ export class ContentService {
       );
   }
 }
+
