@@ -1,3 +1,4 @@
+
 import {
   CanActivate,
   ExecutionContext,
@@ -9,9 +10,7 @@ import {
 import { SupabaseService } from '../../database/supabase.service';
 
 @Injectable()
-export class AdminContentGuard
-  implements CanActivate
-{
+export class AdminContentGuard implements CanActivate {
   constructor(
     private readonly database: SupabaseService,
   ) {}
@@ -63,19 +62,51 @@ export class AdminContentGuard
       );
     }
 
-  const user = data.user;
+    const user = data.user;
 
-console.log('Authenticated user:', {
-  id: user.id,
-  email: user.email,
-  appMetadata: user.app_metadata,
-});
+    /*
+     * Application authorization comes from public.profiles.role,
+     * not auth.users.app_metadata.
+     *
+     * SupabaseService uses the service-role connection, so this
+     * lookup is performed by the trusted backend.
+     */
+    const {
+      data: profile,
+      error: profileError,
+    } =
+      await this.database
+        .getClient()
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
 
-const role =
-  user.app_metadata?.role;
+    if (profileError) {
+      throw new ForbiddenException(
+        'Unable to verify administrator permissions.',
+      );
+    }
 
+    if (!profile) {
+      throw new ForbiddenException(
+        'A profile is required to access administrator features.',
+      );
+    }
+
+    if (profile.role !== 'admin') {
+      throw new ForbiddenException(
+        'Administrator privileges are required.',
+      );
+    }
+
+    /*
+     * Preserve the authenticated Supabase user on the request
+     * for downstream controller/service code.
+     */
     request.user = user;
 
     return true;
   }
 }
+
