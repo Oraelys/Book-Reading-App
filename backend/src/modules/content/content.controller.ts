@@ -1,4 +1,3 @@
-
 import {
   BadRequestException,
   Body,
@@ -51,9 +50,8 @@ export class ContentController {
    * Only administrators may
    * introduce manuscript files.
    *
-   * The administrator performing
-   * the import is NOT automatically
-   * treated as the book's author.
+   * The administrator is the
+   * importer, not the author.
    */
 
   @Post('admin/import')
@@ -72,7 +70,11 @@ export class ContentController {
 
     @Body()
     body: {
-      novelId: string;
+      title: string;
+      authorName: string;
+      authorId?: string;
+      description?: string;
+      category?: string;
     },
 
     @Req()
@@ -84,18 +86,38 @@ export class ContentController {
       );
     }
 
+    if (!body?.title?.trim()) {
+      throw new BadRequestException(
+        'Book title is required.',
+      );
+    }
+
     if (
-      !body?.novelId ||
-      typeof body.novelId !== 'string'
+      !body?.authorName?.trim()
     ) {
       throw new BadRequestException(
-        'novelId is required.',
+        'Author name is required.',
       );
     }
 
     return this.content.importBook(
       file,
-      body.novelId,
+      {
+        title:
+          body.title,
+
+        authorName:
+          body.authorName,
+
+        authorId:
+          body.authorId,
+
+        description:
+          body.description,
+
+        category:
+          body.category,
+      },
       request.user.id,
     );
   }
@@ -287,7 +309,7 @@ export class ContentController {
 
   /*
    * ============================
-   * AUTHOR INTERNAL CHAPTERS
+   * INTERNAL CHAPTERS
    * ============================
    */
 
@@ -344,4 +366,3 @@ export class ContentController {
       );
   }
 }
-

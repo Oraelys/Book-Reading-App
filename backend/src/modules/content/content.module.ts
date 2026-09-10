@@ -23,6 +23,10 @@ import {
 } from '../writing/writing.module';
 
 import {
+  NovelsModule,
+} from '../novels/novels.module';
+
+import {
   ContentController,
 } from './content.controller';
 
@@ -76,6 +80,7 @@ import {
     UploadsModule,
     ProcessingModule,
     WritingModule,
+    NovelsModule,
   ],
 
   controllers: [

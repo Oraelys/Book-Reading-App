@@ -1,4 +1,3 @@
-
 import {
   BadRequestException,
   Injectable,
@@ -38,6 +37,14 @@ import {
   ChapterPublishService,
 } from '../writing/providers/chapter-publish.service';
 
+import {
+  NovelsService,
+} from '../novels/novels.service';
+
+import {
+  SupabaseService,
+} from '../database/supabase.service';
+
 @Injectable()
 export class ContentService {
   constructor(
@@ -52,6 +59,12 @@ export class ContentService {
 
     private readonly chapterPublishService:
       ChapterPublishService,
+
+    private readonly novels:
+      NovelsService,
+
+    private readonly database:
+      SupabaseService,
   ) {}
 
   /*
@@ -62,7 +75,13 @@ export class ContentService {
 
   async importBook(
     file: any,
-    novelId: string,
+    data: {
+      title: string;
+      authorName: string;
+      authorId?: string;
+      description?: string;
+      category?: string;
+    },
     importedBy: string,
   ) {
     if (!file?.buffer) {
@@ -71,16 +90,58 @@ export class ContentService {
       );
     }
 
-    if (!novelId?.trim()) {
-      throw new BadRequestException(
-        'novelId is required.',
-      );
-    }
-
     if (!importedBy?.trim()) {
       throw new BadRequestException(
         'Administrator identity is required.',
       );
+    }
+
+    const title =
+      data?.title?.trim();
+
+    if (!title) {
+      throw new BadRequestException(
+        'Book title is required.',
+      );
+    }
+
+    const authorName =
+      data?.authorName?.trim();
+
+    if (!authorName) {
+      throw new BadRequestException(
+        'Author name is required.',
+      );
+    }
+
+    const authorId =
+      data?.authorId?.trim() ||
+      null;
+
+    /*
+     * If the administrator says the credited
+     * author has an Inkwell account, verify that
+     * account exists before creating the book.
+     */
+    if (authorId) {
+      const {
+        data: author,
+        error: authorError,
+      } = await this.database
+        .getClient()
+        .from('profiles')
+        .select('id')
+        .eq('id', authorId)
+        .maybeSingle();
+
+      if (
+        authorError ||
+        !author
+      ) {
+        throw new BadRequestException(
+          'The credited Inkwell author could not be found.',
+        );
+      }
     }
 
     const originalName =
@@ -108,6 +169,23 @@ export class ContentService {
       );
     }
 
+    /*
+     * Create the novel without assigning
+     * the administrator as its owner.
+     */
+    const novel =
+      await this.novels
+        .createImportedNovel({
+          title,
+          description:
+            data.description?.trim() ||
+            null,
+          category:
+            data.category?.trim() ||
+            null,
+          authorName,
+        });
+
     const temporaryDirectory =
       await fs.mkdtemp(
         join(
@@ -123,34 +201,89 @@ export class ContentService {
       );
 
     try {
+      /*
+       * Record the import relationship.
+       */
+      const {
+        error: importError,
+      } = await this.database
+        .getClient()
+        .from('novel_imports')
+        .insert({
+          novel_id:
+            novel.id,
+
+          imported_by:
+            importedBy,
+
+          credited_author_id:
+            authorId,
+
+          credited_author_name:
+            authorName,
+
+          original_file_name:
+            basename(originalName),
+
+          file_type:
+            extension.substring(1),
+        });
+
+      if (importError) {
+        throw importError;
+      }
+
       await fs.writeFile(
         temporaryFile,
         file.buffer,
       );
 
       /*
-       * The administrator ID is deliberately
-       * not passed to the pipeline as the
-       * novel owner/author.
+       * The pipeline receives only the novel ID.
        *
-       * It represents only the administrator
-       * performing the import.
+       * It does NOT receive importedBy as
+       * the novel owner.
        */
-
       const result =
         await this.pipeline.process(
           temporaryFile,
-          novelId,
+          novel.id,
         );
 
       return {
         ...result,
+
+        novelId:
+          novel.id,
+
         importedBy,
+
         originalFileName:
           basename(originalName),
+
         fileType:
           extension.substring(1),
+
+        creditedAuthor:
+          authorName,
+
+        creditedAuthorId:
+          authorId,
       };
+    } catch (error) {
+      /*
+       * The novel is only an imported shell until
+       * its manuscript has successfully entered
+       * the processing pipeline.
+       *
+       * Delete it on failure. The FK cascade
+       * removes chapters/import metadata belonging
+       * to it.
+       */
+      await this.novels
+        .delete(novel.id);
+
+      throw error;
     } finally {
       await fs.rm(
         temporaryDirectory,
@@ -171,9 +304,8 @@ export class ContentService {
   async getProcessingJob(
     jobId: string,
   ) {
-    return this.processing.getJob(
-      jobId,
-    );
+    return this.processing
+      .getJob(jobId);
   }
 
   /*
@@ -279,4 +411,3 @@ export class ContentService {
       );
   }
 }
-

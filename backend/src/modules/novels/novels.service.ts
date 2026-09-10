@@ -2,12 +2,15 @@ import {
   Injectable,
 } from '@nestjs/common';
 
-import { SupabaseService } from '../database/supabase.service';
+import {
+  SupabaseService,
+} from '../database/supabase.service';
 
 @Injectable()
 export class NovelsService {
   constructor(
-    private readonly database: SupabaseService,
+    private readonly database:
+      SupabaseService,
   ) {}
 
   /**
@@ -24,6 +27,63 @@ export class NovelsService {
       .getClient()
       .from('novels')
       .insert(data)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return novel;
+  }
+
+  /**
+   * Create a novel introduced by an administrator.
+   *
+   * The administrator is NOT stored as the novel owner.
+   *
+   * Ownership remains separate from import administration.
+   */
+  async createImportedNovel(
+    data: {
+      title: string;
+      description?: string | null;
+      category?: string | null;
+      authorName: string;
+    },
+  ) {
+    const {
+      data: novel,
+      error,
+    } = await this.database
+      .getClient()
+      .from('novels')
+      .insert({
+        title: data.title,
+        description:
+          data.description ?? null,
+        category:
+          data.category ?? null,
+
+        /*
+         * An imported novel does not belong
+         * to the administrator.
+         */
+        created_by: null,
+
+        /*
+         * Keep imported content separate
+         * from author-created stories.
+         */
+        content_origin:
+          'admin_imported',
+
+        /*
+         * Imported books begin unpublished.
+         */
+        status: 'draft',
+        is_public: false,
+      })
       .select()
       .single();
 
@@ -92,7 +152,9 @@ export class NovelsService {
    *
    * This intentionally includes draft novels.
    */
-  async findOne(id: string) {
+  async findOne(
+    id: string,
+  ) {
     const {
       data,
       error,
@@ -127,7 +189,8 @@ export class NovelsService {
       .from('novels')
       .update({
         ...dto,
-        updated_at: new Date(),
+        updated_at:
+          new Date(),
       })
       .eq('id', id)
       .select()
@@ -143,7 +206,9 @@ export class NovelsService {
   /**
    * Internal deletion method.
    */
-  async delete(id: string) {
+  async delete(
+    id: string,
+  ) {
     const {
       error,
     } = await this.database
@@ -264,7 +329,8 @@ export class NovelsService {
         'update_novel_word_count',
         {
           novel_uuid: novelId,
-          word_difference: difference,
+          word_difference:
+            difference,
         },
       );
 
