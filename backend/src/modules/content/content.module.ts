@@ -27,6 +27,10 @@ import {
 } from '../novels/novels.module';
 
 import {
+  PublishingModule,
+} from '../publishing/publishing.module';
+
+import {
   ContentController,
 } from './content.controller';
 
@@ -77,10 +81,16 @@ import {
 @Module({
   imports: [
     DatabaseModule,
+
     UploadsModule,
+
     ProcessingModule,
+
     WritingModule,
+
     NovelsModule,
+
+    PublishingModule,
   ],
 
   controllers: [

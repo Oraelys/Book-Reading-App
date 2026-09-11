@@ -1,4 +1,3 @@
-
 import {
   CanActivate,
   ExecutionContext,
@@ -64,13 +63,6 @@ export class AdminContentGuard implements CanActivate {
 
     const user = data.user;
 
-    /*
-     * Application authorization comes from public.profiles.role,
-     * not auth.users.app_metadata.
-     *
-     * SupabaseService uses the service-role connection, so this
-     * lookup is performed by the trusted backend.
-     */
     const {
       data: profile,
       error: profileError,
@@ -78,7 +70,7 @@ export class AdminContentGuard implements CanActivate {
       await this.database
         .getClient()
         .from('profiles')
-        .select('role')
+        .select('id, role')
         .eq('id', user.id)
         .maybeSingle();
 
@@ -100,13 +92,8 @@ export class AdminContentGuard implements CanActivate {
       );
     }
 
-    /*
-     * Preserve the authenticated Supabase user on the request
-     * for downstream controller/service code.
-     */
     request.user = user;
 
     return true;
   }
 }
-

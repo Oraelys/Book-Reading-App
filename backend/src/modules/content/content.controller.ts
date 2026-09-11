@@ -46,12 +46,6 @@ export class ContentController {
    * ============================
    * ADMIN BOOK IMPORT
    * ============================
-   *
-   * Only administrators may
-   * introduce manuscript files.
-   *
-   * The administrator is the
-   * importer, not the author.
    */
 
   @Post('admin/import')
@@ -120,6 +114,144 @@ export class ContentController {
       },
       request.user.id,
     );
+  }
+
+  /*
+   * ============================
+   * ADMIN IMPORT MANAGEMENT
+   * ============================
+   */
+
+  @Get('admin/imported')
+  @UseGuards(AdminContentGuard)
+  async getImportedNovels() {
+    return this.content
+      .getImportedNovels();
+  }
+
+  @Get('admin/imported/:novelId')
+  @UseGuards(AdminContentGuard)
+  async getImportedNovel(
+    @Param('novelId')
+    novelId: string,
+  ) {
+    return this.content
+      .getImportedNovel(
+        novelId,
+      );
+  }
+
+  @Get(
+    'admin/imported/:novelId/chapters',
+  )
+  @UseGuards(AdminContentGuard)
+  async getImportedChapters(
+    @Param('novelId')
+    novelId: string,
+  ) {
+    return this.content
+      .getImportedChapters(
+        novelId,
+      );
+  }
+
+  @Get(
+    'admin/imported/:novelId/chapters/:chapterNumber',
+  )
+  @UseGuards(AdminContentGuard)
+  async getImportedChapter(
+    @Param('novelId')
+    novelId: string,
+
+    @Param(
+      'chapterNumber',
+      ParseIntPipe,
+    )
+    chapterNumber: number,
+  ) {
+    return this.content
+      .getImportedChapter(
+        novelId,
+        chapterNumber,
+      );
+  }
+
+  @Get(
+    'admin/imported/:novelId/validate',
+  )
+  @UseGuards(AdminContentGuard)
+  async validateImportedNovel(
+    @Param('novelId')
+    novelId: string,
+  ) {
+    return this.content
+      .validateImportedNovel(
+        novelId,
+      );
+  }
+
+  @Post(
+    'admin/imported/:novelId/chapters/:chapterId/publish',
+  )
+  @UseGuards(AdminContentGuard)
+  async publishImportedChapter(
+    @Param('novelId')
+    novelId: string,
+
+    @Param('chapterId')
+    chapterId: string,
+  ) {
+    return this.content
+      .publishImportedChapter(
+        novelId,
+        chapterId,
+      );
+  }
+
+  @Post(
+    'admin/imported/:novelId/chapters/:chapterId/unpublish',
+  )
+  @UseGuards(AdminContentGuard)
+  async unpublishImportedChapter(
+    @Param('novelId')
+    novelId: string,
+
+    @Param('chapterId')
+    chapterId: string,
+  ) {
+    return this.content
+      .unpublishImportedChapter(
+        novelId,
+        chapterId,
+      );
+  }
+
+  @Post(
+    'admin/imported/:novelId/publish',
+  )
+  @UseGuards(AdminContentGuard)
+  async publishImportedNovel(
+    @Param('novelId')
+    novelId: string,
+  ) {
+    return this.content
+      .publishImportedNovel(
+        novelId,
+      );
+  }
+
+  @Post(
+    'admin/imported/:novelId/unpublish',
+  )
+  @UseGuards(AdminContentGuard)
+  async unpublishImportedNovel(
+    @Param('novelId')
+    novelId: string,
+  ) {
+    return this.content
+      .unpublishImportedNovel(
+        novelId,
+      );
   }
 
   /*
@@ -309,7 +441,7 @@ export class ContentController {
 
   /*
    * ============================
-   * INTERNAL CHAPTERS
+   * INTERNAL AUTHOR CHAPTERS
    * ============================
    */
 

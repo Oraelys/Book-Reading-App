@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 
 import {
@@ -38,6 +39,10 @@ import {
 } from '../writing/providers/chapter-publish.service';
 
 import {
+  PublishingService,
+} from '../publishing/publishing.service';
+
+import {
   NovelsService,
 } from '../novels/novels.service';
 
@@ -59,6 +64,9 @@ export class ContentService {
 
     private readonly chapterPublishService:
       ChapterPublishService,
+
+    private readonly publishingService:
+      PublishingService,
 
     private readonly novels:
       NovelsService,
@@ -119,20 +127,20 @@ export class ContentService {
       null;
 
     /*
-     * If the administrator says the credited
-     * author has an Inkwell account, verify that
-     * account exists before creating the book.
+     * If the credited author has
+     * an Inkwell account, verify it.
      */
     if (authorId) {
       const {
         data: author,
         error: authorError,
-      } = await this.database
-        .getClient()
-        .from('profiles')
-        .select('id')
-        .eq('id', authorId)
-        .maybeSingle();
+      } =
+        await this.database
+          .getClient()
+          .from('profiles')
+          .select('id')
+          .eq('id', authorId)
+          .maybeSingle();
 
       if (
         authorError ||
@@ -170,19 +178,22 @@ export class ContentService {
     }
 
     /*
-     * Create the novel without assigning
-     * the administrator as its owner.
+     * Imported novels do not belong
+     * to the administrator.
      */
     const novel =
       await this.novels
         .createImportedNovel({
           title,
+
           description:
             data.description?.trim() ||
             null,
+
           category:
             data.category?.trim() ||
             null,
+
           authorName,
         });
 
@@ -201,33 +212,31 @@ export class ContentService {
       );
 
     try {
-      /*
-       * Record the import relationship.
-       */
       const {
         error: importError,
-      } = await this.database
-        .getClient()
-        .from('novel_imports')
-        .insert({
-          novel_id:
-            novel.id,
+      } =
+        await this.database
+          .getClient()
+          .from('novel_imports')
+          .insert({
+            novel_id:
+              novel.id,
 
-          imported_by:
-            importedBy,
+            imported_by:
+              importedBy,
 
-          credited_author_id:
-            authorId,
+            credited_author_id:
+              authorId,
 
-          credited_author_name:
-            authorName,
+            credited_author_name:
+              authorName,
 
-          original_file_name:
-            basename(originalName),
+            original_file_name:
+              basename(originalName),
 
-          file_type:
-            extension.substring(1),
-        });
+            file_type:
+              extension.substring(1),
+          });
 
       if (importError) {
         throw importError;
@@ -238,12 +247,6 @@ export class ContentService {
         file.buffer,
       );
 
-      /*
-       * The pipeline receives only the novel ID.
-       *
-       * It does NOT receive importedBy as
-       * the novel owner.
-       */
       const result =
         await this.pipeline.process(
           temporaryFile,
@@ -271,15 +274,6 @@ export class ContentService {
           authorId,
       };
     } catch (error) {
-      /*
-       * The novel is only an imported shell until
-       * its manuscript has successfully entered
-       * the processing pipeline.
-       *
-       * Delete it on failure. The FK cascade
-       * removes chapters/import metadata belonging
-       * to it.
-       */
       await this.novels
         .delete(novel.id);
 
@@ -293,6 +287,269 @@ export class ContentService {
         },
       );
     }
+  }
+
+  /*
+   * ============================
+   * ADMIN IMPORT MANAGEMENT
+   * ============================
+   */
+
+  async getImportedNovels() {
+    const {
+      data,
+      error,
+    } =
+      await this.database
+        .getClient()
+        .from('novels')
+        .select(
+          `
+          id,
+          title,
+          author_name,
+          description,
+          category,
+          status,
+          is_public,
+          content_origin,
+          total_chapters,
+          published_chapters,
+          total_words,
+          created_at,
+          updated_at,
+          published_at
+          `,
+        )
+        .eq(
+          'content_origin',
+          'admin_imported',
+        )
+        .order(
+          'created_at',
+          {
+            ascending: false,
+          },
+        );
+
+    if (error) {
+      throw error;
+    }
+
+    return data ?? [];
+  }
+
+  async getImportedNovel(
+    novelId: string,
+  ) {
+    const {
+      data,
+      error,
+    } =
+      await this.database
+        .getClient()
+        .from('novels')
+        .select(
+          `
+          id,
+          title,
+          author_name,
+          description,
+          category,
+          status,
+          is_public,
+          content_origin,
+          total_chapters,
+          published_chapters,
+          total_words,
+          created_at,
+          updated_at,
+          published_at
+          `,
+        )
+        .eq(
+          'id',
+          novelId,
+        )
+        .eq(
+          'content_origin',
+          'admin_imported',
+        )
+        .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      throw new NotFoundException(
+        'Imported novel not found.',
+      );
+    }
+
+    return data;
+  }
+
+  async getImportedChapters(
+    novelId: string,
+  ) {
+    await this.getImportedNovel(
+      novelId,
+    );
+
+    const {
+      data,
+      error,
+    } =
+      await this.database
+        .getClient()
+        .from('chapters')
+        .select(
+          `
+          id,
+          novel_id,
+          title,
+          slug,
+          chapter_number,
+          content,
+          word_count,
+          estimated_read_time,
+          is_published,
+          published_at,
+          unpublished_at,
+          status,
+          views,
+          likes,
+          comments,
+          created_at,
+          updated_at,
+          last_saved_at
+          `,
+        )
+        .eq(
+          'novel_id',
+          novelId,
+        )
+        .order(
+          'chapter_number',
+          {
+            ascending: true,
+          },
+        );
+
+    if (error) {
+      throw error;
+    }
+
+    return data ?? [];
+  }
+
+  async getImportedChapter(
+    novelId: string,
+    chapterNumber: number,
+  ) {
+    await this.getImportedNovel(
+      novelId,
+    );
+
+    const {
+      data,
+      error,
+    } =
+      await this.database
+        .getClient()
+        .from('chapters')
+        .select('*')
+        .eq(
+          'novel_id',
+          novelId,
+        )
+        .eq(
+          'chapter_number',
+          chapterNumber,
+        )
+        .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      throw new NotFoundException(
+        'Imported chapter not found.',
+      );
+    }
+
+    return data;
+  }
+
+  async publishImportedChapter(
+    novelId: string,
+    chapterId: string,
+  ) {
+    await this.getImportedNovel(
+      novelId,
+    );
+
+    return this.chapterPublishService
+      .publish(
+        chapterId,
+        novelId,
+      );
+  }
+
+  async unpublishImportedChapter(
+    novelId: string,
+    chapterId: string,
+  ) {
+    await this.getImportedNovel(
+      novelId,
+    );
+
+    return this.chapterPublishService
+      .unpublish(
+        chapterId,
+        novelId,
+      );
+  }
+
+  async publishImportedNovel(
+    novelId: string,
+  ) {
+    await this.getImportedNovel(
+      novelId,
+    );
+
+    return this.publishingService
+      .publishStory(
+        novelId,
+      );
+  }
+
+  async unpublishImportedNovel(
+    novelId: string,
+  ) {
+    await this.getImportedNovel(
+      novelId,
+    );
+
+    return this.publishingService
+      .unpublishStory(
+        novelId,
+      );
+  }
+
+  async validateImportedNovel(
+    novelId: string,
+  ) {
+    await this.getImportedNovel(
+      novelId,
+    );
+
+    return this.publishingService
+      .validateStory(
+        novelId,
+      );
   }
 
   /*
@@ -336,7 +593,7 @@ export class ContentService {
 
   /*
    * ============================
-   * ADMIN / AUTHOR
+   * AUTHOR
    * ============================
    */
 
