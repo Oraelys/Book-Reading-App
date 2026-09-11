@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL;
 
 const API_URL = (
-  configuredApiUrl || '10.48.94.135:3000'
+  configuredApiUrl || 'https://inkwell-backend-ewrq.onrender.com'
 ).replace(/\/+$/, '');
 
 export class ApiError extends Error {
