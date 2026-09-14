@@ -27,6 +27,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { MlopsModule } from './modules/mlops/mlops.module';
 import { ContentModule } from './modules/content/content.module';
 import { WritingModule } from './modules/writing/writing.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -53,46 +54,30 @@ import { WritingModule } from './modules/writing/writing.module';
      * Canonical publishing domain.
      */
     PublishingModule,
-
     MediaModule,
-
     UploadsModule,
-
     SeriesModule,
-
     DiscoveryModule,
-
     ActivityModule,
-
     NotificationsModule,
-
     EventsModule,
-
     AnalyticsModule,
-
     RecommendationsModule,
-
     SearchModule,
-
     PreferencesModule,
-
     FeaturesModule,
-
     DatasetModule,
-
     AiModule,
-
     MlopsModule,
-
     ContentModule,
-
     /*
      * Canonical author writing domain.
      *
      * This replaces the old standalone drafts/
      * and chapters/ implementations.
      */
-    WritingModule,
+    WritingModule, 
+    HealthModule
   ],
 })
 export class AppModule {}

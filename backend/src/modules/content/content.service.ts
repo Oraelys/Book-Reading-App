@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 
@@ -52,6 +53,9 @@ import {
 
 @Injectable()
 export class ContentService {
+
+  private readonly logger =
+    new Logger(ContentService.name);
   constructor(
     private readonly pipeline:
       ContentPipelineService,
@@ -82,105 +86,164 @@ export class ContentService {
    */
 
   async importBook(
-    file: any,
-    data: {
-      title: string;
-      authorName: string;
-      authorId?: string;
-      description?: string;
-      category?: string;
-    },
-    importedBy: string,
-  ) {
-    if (!file?.buffer) {
-      throw new BadRequestException(
-        'Uploaded file is empty.',
-      );
-    }
+  file: any,
+  data: {
+    title: string;
+    authorName: string;
+    authorId?: string;
+    description?: string;
+    category?: string;
+  },
+  importedBy: string,
+) {
+  this.logger.log(
+    '========== ADMIN BOOK IMPORT STARTED ==========',
+  );
 
-    if (!importedBy?.trim()) {
-      throw new BadRequestException(
-        'Administrator identity is required.',
-      );
-    }
+  this.logger.log(
+    `Import request received. File: ${
+      file?.originalname ?? 'unknown'
+    }, Size: ${
+      file?.size ?? 'unknown'
+    } bytes`,
+  );
 
-    const title =
-      data?.title?.trim();
+  if (!file?.buffer) {
+    this.logger.warn(
+      'Import rejected: uploaded file has no buffer.',
+    );
 
-    if (!title) {
-      throw new BadRequestException(
-        'Book title is required.',
-      );
-    }
+    throw new BadRequestException(
+      'Uploaded file is empty.',
+    );
+  }
 
-    const authorName =
-      data?.authorName?.trim();
+  if (!importedBy?.trim()) {
+    this.logger.warn(
+      'Import rejected: administrator identity is missing.',
+    );
 
-    if (!authorName) {
-      throw new BadRequestException(
-        'Author name is required.',
-      );
-    }
+    throw new BadRequestException(
+      'Administrator identity is required.',
+    );
+  }
 
-    const authorId =
-      data?.authorId?.trim() ||
-      null;
+  const title =
+    data?.title?.trim();
 
-    /*
-     * If the credited author has
-     * an Inkwell account, verify it.
-     */
-    if (authorId) {
-      const {
-        data: author,
-        error: authorError,
-      } =
-        await this.database
-          .getClient()
-          .from('profiles')
-          .select('id')
-          .eq('id', authorId)
-          .maybeSingle();
+  if (!title) {
+    this.logger.warn(
+      'Import rejected: book title is missing.',
+    );
 
-      if (
-        authorError ||
-        !author
-      ) {
-        throw new BadRequestException(
-          'The credited Inkwell author could not be found.',
-        );
-      }
-    }
+    throw new BadRequestException(
+      'Book title is required.',
+    );
+  }
 
-    const originalName =
-      file.originalname ||
-      'manuscript';
+  const authorName =
+    data?.authorName?.trim();
 
-    const extension =
-      extname(originalName)
-        .toLowerCase();
+  if (!authorName) {
+    this.logger.warn(
+      'Import rejected: author name is missing.',
+    );
 
-    const supportedExtensions =
-      new Set([
-        '.txt',
-        '.docx',
-        '.epub',
-      ]);
+    throw new BadRequestException(
+      'Author name is required.',
+    );
+  }
+
+  const authorId =
+    data?.authorId?.trim() ||
+    null;
+
+  /*
+   * If the credited author has
+   * an Inkwell account, verify it.
+   */
+  if (authorId) {
+    this.logger.log(
+      'Stage 1: validating credited Inkwell author.',
+    );
+
+    const {
+      data: author,
+      error: authorError,
+    } =
+      await this.database
+        .getClient()
+        .from('profiles')
+        .select('id')
+        .eq('id', authorId)
+        .maybeSingle();
 
     if (
-      !supportedExtensions.has(
-        extension,
-      )
+      authorError ||
+      !author
     ) {
+      this.logger.error(
+        `Credited author validation failed: ${
+          authorError?.message ??
+          'profile not found'
+        }`,
+      );
+
       throw new BadRequestException(
-        'Unsupported manuscript format. Supported formats are TXT, DOCX, and EPUB.',
+        'The credited Inkwell author could not be found.',
       );
     }
 
-    /*
-     * Imported novels do not belong
-     * to the administrator.
-     */
+    this.logger.log(
+      'Stage 1 complete: credited author verified.',
+    );
+  } else {
+    this.logger.log(
+      'Stage 1: no Inkwell author ID supplied; treating author as external.',
+    );
+  }
+
+  const originalName =
+    file.originalname ||
+    'manuscript';
+
+  const extension =
+    extname(originalName)
+      .toLowerCase();
+
+  const supportedExtensions =
+    new Set([
+      '.txt',
+      '.docx',
+      '.epub',
+    ]);
+
+  if (
+    !supportedExtensions.has(
+      extension,
+    )
+  ) {
+    this.logger.warn(
+      `Import rejected: unsupported file extension ${extension}.`,
+    );
+
+    throw new BadRequestException(
+      'Unsupported manuscript format. Supported formats are TXT, DOCX, and EPUB.',
+    );
+  }
+
+  this.logger.log(
+    `File validation complete. Format: ${extension}`,
+  );
+
+  let novelId: string | null = null;
+  let temporaryDirectory: string | null = null;
+
+  try {
+    this.logger.log(
+      'Stage 2: creating imported novel record.',
+    );
+
     const novel =
       await this.novels
         .createImportedNovel({
@@ -197,7 +260,13 @@ export class ContentService {
           authorName,
         });
 
-    const temporaryDirectory =
+    novelId = novel.id;
+
+    this.logger.log(
+      `Stage 2 complete: imported novel created. Novel ID: ${novel.id}`,
+    );
+
+    temporaryDirectory =
       await fs.mkdtemp(
         join(
           tmpdir(),
@@ -211,83 +280,206 @@ export class ContentService {
         `${randomUUID()}${extension}`,
       );
 
-    try {
-      const {
-        error: importError,
-      } =
-        await this.database
-          .getClient()
-          .from('novel_imports')
-          .insert({
-            novel_id:
-              novel.id,
+    this.logger.log(
+      `Stage 3: temporary import directory created: ${temporaryDirectory}`,
+    );
 
-            imported_by:
-              importedBy,
+    this.logger.log(
+      'Stage 4: creating novel_imports record.',
+    );
 
-            credited_author_id:
-              authorId,
+    const {
+      error: importError,
+    } =
+      await this.database
+        .getClient()
+        .from('novel_imports')
+        .insert({
+          novel_id:
+            novel.id,
 
-            credited_author_name:
-              authorName,
+          imported_by:
+            importedBy,
 
-            original_file_name:
-              basename(originalName),
+          credited_author_id:
+            authorId,
 
-            file_type:
-              extension.substring(1),
-          });
+          credited_author_name:
+            authorName,
 
-      if (importError) {
-        throw importError;
-      }
+          original_file_name:
+            basename(originalName),
 
-      await fs.writeFile(
-        temporaryFile,
-        file.buffer,
+          file_type:
+            extension.substring(1),
+        });
+
+    if (importError) {
+      this.logger.error(
+        [
+          'Stage 4 FAILED: novel_imports insert failed.',
+          `Message: ${importError.message}`,
+          `Code: ${importError.code ?? 'unknown'}`,
+          `Details: ${importError.details ?? 'none'}`,
+          `Hint: ${importError.hint ?? 'none'}`,
+        ].join('\n'),
       );
 
-      const result =
-        await this.pipeline.process(
-          temporaryFile,
-          novel.id,
+      throw importError;
+    }
+
+    this.logger.log(
+      'Stage 4 complete: novel_imports record created.',
+    );
+
+    this.logger.log(
+      `Stage 5: writing uploaded file to temporary path: ${temporaryFile}`,
+    );
+
+    await fs.writeFile(
+      temporaryFile,
+      file.buffer,
+    );
+
+    this.logger.log(
+      'Stage 5 complete: uploaded file written successfully.',
+    );
+
+    this.logger.log(
+      'Stage 6: starting content processing pipeline.',
+    );
+
+    const result =
+      await this.pipeline.process(
+        temporaryFile,
+        novel.id,
+      );
+
+    this.logger.log(
+      'Stage 6 complete: content processing pipeline finished successfully.',
+    );
+
+    this.logger.log(
+      '========== ADMIN BOOK IMPORT COMPLETED =========='
+    );
+
+    return {
+      ...result,
+
+      novelId:
+        novel.id,
+
+      importedBy,
+
+      originalFileName:
+        basename(originalName),
+
+      fileType:
+        extension.substring(1),
+
+      creditedAuthor:
+        authorName,
+
+      creditedAuthorId:
+        authorId,
+    };
+  } catch (error) {
+    this.logger.error(
+      '========== ADMIN BOOK IMPORT FAILED ==========',
+    );
+
+    if (error instanceof Error) {
+      this.logger.error(
+        `Error: ${error.message}`,
+      );
+
+      if (error.stack) {
+        this.logger.error(
+          `Stack:\n${error.stack}`,
         );
-
-      return {
-        ...result,
-
-        novelId:
-          novel.id,
-
-        importedBy,
-
-        originalFileName:
-          basename(originalName),
-
-        fileType:
-          extension.substring(1),
-
-        creditedAuthor:
-          authorName,
-
-        creditedAuthorId:
-          authorId,
-      };
-    } catch (error) {
-      await this.novels
-        .delete(novel.id);
-
-      throw error;
-    } finally {
-      await fs.rm(
-        temporaryDirectory,
-        {
-          recursive: true,
-          force: true,
-        },
+      }
+    } else {
+      this.logger.error(
+        `Unknown import error: ${String(error)}`,
       );
     }
+
+    /*
+     * Roll back the imported novel if it was
+     * successfully created.
+     */
+    if (novelId) {
+      this.logger.warn(
+        `Rolling back imported novel: ${novelId}`,
+      );
+
+      try {
+        await this.novels.delete(
+          novelId,
+        );
+
+        this.logger.log(
+          `Rollback complete for novel: ${novelId}`,
+        );
+      } catch (rollbackError) {
+        if (rollbackError instanceof Error) {
+          this.logger.error(
+            [
+              'Novel rollback failed.',
+              `Novel ID: ${novelId}`,
+              `Error: ${rollbackError.message}`,
+              rollbackError.stack
+                ? `Stack:\n${rollbackError.stack}`
+                : '',
+            ].join('\n'),
+          );
+        } else {
+          this.logger.error(
+            `Novel rollback failed: ${String(rollbackError)}`,
+          );
+        }
+      }
+    }
+
+    throw error;
+  } finally {
+    if (temporaryDirectory) {
+      this.logger.log(
+        `Cleaning temporary import directory: ${temporaryDirectory}`,
+      );
+
+      try {
+        await fs.rm(
+          temporaryDirectory,
+          {
+            recursive: true,
+            force: true,
+          },
+        );
+
+        this.logger.log(
+          'Temporary import directory cleaned successfully.',
+        );
+      } catch (cleanupError) {
+        if (cleanupError instanceof Error) {
+          this.logger.error(
+            [
+              'Temporary directory cleanup failed.',
+              `Error: ${cleanupError.message}`,
+              cleanupError.stack
+                ? `Stack:\n${cleanupError.stack}`
+                : '',
+            ].join('\n'),
+          );
+        } else {
+          this.logger.error(
+            `Temporary directory cleanup failed: ${String(cleanupError)}`,
+          );
+        }
+      }
+    }
   }
+}
 
   /*
    * ============================
