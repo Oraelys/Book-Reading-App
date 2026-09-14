@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 
 const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL;
@@ -36,6 +37,15 @@ async function getAccessToken(): Promise<string> {
       'You must be signed in to perform this action.',
       401,
     );
+  }
+
+  // TEMPORARY DEVELOPMENT LOGGING
+  // Remove this after copying the token for Postman testing.
+  if (__DEV__) {
+    console.log('========================================');
+    console.log('INKWELL SUPABASE ACCESS TOKEN');
+    console.log(session.access_token);
+    console.log('========================================');
   }
 
   return session.access_token;
@@ -113,3 +123,4 @@ export async function apiRequest<T = unknown>(
 export function getApiUrl(): string {
   return API_URL;
 }
+
