@@ -133,49 +133,68 @@ export default function ProfileScreen() {
   };
 
   const handleAuthorizationTest = async () => {
-    setAuthorizationTesting(true);
-    setAuthorizationResult(null);
+  setAuthorizationTesting(true);
+  setAuthorizationResult(null);
 
-    try {
-      /*
-       * apiRequest() automatically:
-       * 1. Gets the current Supabase session.
-       * 2. Gets session.access_token.
-       * 3. Sends Authorization: Bearer <token>.
-       *
-       * We deliberately do not display the token.
-       */
-      await apiRequest('/content/admin/imported');
+  try {
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
 
+    if (error) {
       setAuthorizationResult(
-        '200 — Admin authorization granted.',
+        `Supabase session error: ${error.message}`,
       );
-    } catch (error) {
-      if (error instanceof ApiError) {
-        if (error.status === 401) {
-          setAuthorizationResult(
-            `401 — Authentication required. ${error.message}`,
-          );
-        } else if (error.status === 403) {
-          setAuthorizationResult(
-            `403 — Access denied. ${error.message}`,
-          );
-        } else {
-          setAuthorizationResult(
-            `${error.status} — ${error.message}`,
-          );
-        }
-      } else if (error instanceof Error) {
+      return;
+    }
+
+    if (!session?.access_token) {
+      setAuthorizationResult(
+        'No Supabase access token found. Please sign in again.',
+      );
+      return;
+    }
+
+    console.log('Session user:', session.user?.id);
+    console.log(
+      'Token exists:',
+      Boolean(session.access_token),
+    );
+    console.log(
+      'Token length:',
+      session.access_token.length,
+    );
+
+    await apiRequest('/content/admin/imported');
+
+    setAuthorizationResult(
+      '200 - Admin authorization successful.',
+    );
+  } catch (error) {
+    if (error instanceof ApiError) {
+      if (error.status === 401) {
         setAuthorizationResult(
-          `Error — ${error.message}`,
+          `401 - ${error.message}`,
+        );
+      } else if (error.status === 403) {
+        setAuthorizationResult(
+          `403 - ${error.message}`,
         );
       } else {
-        setAuthorizationResult('Error — Authorization test failed.');
+        setAuthorizationResult(
+          `${error.status} - ${error.message}`,
+        );
       }
-    } finally {
-      setAuthorizationTesting(false);
+    } else if (error instanceof Error) {
+      setAuthorizationResult(error.message);
+    } else {
+      setAuthorizationResult('Authorization test failed.');
     }
-  };
+  } finally {
+    setAuthorizationTesting(false);
+  }
+};
 
   const handleSignOut = async () => {
     Alert.alert(
