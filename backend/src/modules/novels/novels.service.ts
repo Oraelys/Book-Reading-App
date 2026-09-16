@@ -43,6 +43,13 @@ export class NovelsService {
    * The administrator is NOT stored as the novel owner.
    *
    * Ownership remains separate from import administration.
+   *
+   * For imported books:
+   * - created_by remains NULL
+   * - content_origin is admin_imported
+   * - author_name stores the credited author's name
+   * - novel_imports stores the import administrator
+   *   and optional linked Inkwell author
    */
   async createImportedNovel(
     data: {
@@ -59,9 +66,15 @@ export class NovelsService {
       .getClient()
       .from('novels')
       .insert({
-        title: data.title,
+        title:
+          data.title,
+
+        author_name:
+          data.authorName,
+
         description:
           data.description ?? null,
+
         category:
           data.category ?? null,
 
@@ -69,7 +82,8 @@ export class NovelsService {
          * An imported novel does not belong
          * to the administrator.
          */
-        created_by: null,
+        created_by:
+          null,
 
         /*
          * Keep imported content separate
@@ -81,8 +95,11 @@ export class NovelsService {
         /*
          * Imported books begin unpublished.
          */
-        status: 'draft',
-        is_public: false,
+        status:
+          'draft',
+
+        is_public:
+          false,
       })
       .select()
       .single();
@@ -239,7 +256,8 @@ export class NovelsService {
       .rpc(
         'increment_chapter_count',
         {
-          novel_uuid: novelId,
+          novel_uuid:
+            novelId,
         },
       );
 
@@ -261,7 +279,8 @@ export class NovelsService {
       .rpc(
         'decrement_chapter_count',
         {
-          novel_uuid: novelId,
+          novel_uuid:
+            novelId,
         },
       );
 
@@ -283,7 +302,8 @@ export class NovelsService {
       .rpc(
         'increment_published_count',
         {
-          novel_uuid: novelId,
+          novel_uuid:
+            novelId,
         },
       );
 
@@ -305,7 +325,8 @@ export class NovelsService {
       .rpc(
         'decrement_published_count',
         {
-          novel_uuid: novelId,
+          novel_uuid:
+            novelId,
         },
       );
 
@@ -328,7 +349,9 @@ export class NovelsService {
       .rpc(
         'update_novel_word_count',
         {
-          novel_uuid: novelId,
+          novel_uuid:
+            novelId,
+
           word_difference:
             difference,
         },
@@ -339,3 +362,4 @@ export class NovelsService {
     }
   }
 }
+

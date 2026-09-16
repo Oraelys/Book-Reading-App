@@ -399,10 +399,17 @@ export class ContentService {
         );
       }
     } else {
-      this.logger.error(
-        `Unknown import error: ${String(error)}`,
-      );
-    }
+  this.logger.error(
+    [
+      'Unknown import error object:',
+      JSON.stringify(
+        error,
+        null,
+        2,
+      ),
+    ].join('\n'),
+  );
+}
 
     /*
      * Roll back the imported novel if it was
