@@ -94,7 +94,9 @@ export class AdminRecoveryService {
     };
   }
 
-  private assertSecret(suppliedSecret: string | undefined): void {
+  private assertSecret(
+    suppliedSecret: string | undefined,
+  ): asserts suppliedSecret is string {
     if (!suppliedSecret) {
       throw new UnauthorizedException(
         'Administrator recovery secret is required.',
