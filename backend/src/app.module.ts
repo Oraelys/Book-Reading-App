@@ -28,31 +28,17 @@ import { MlopsModule } from './modules/mlops/mlops.module';
 import { ContentModule } from './modules/content/content.module';
 import { WritingModule } from './modules/writing/writing.module';
 import { HealthModule } from './health/health.module';
+import { AdminRecoveryModule } from './modules/admin/admin-recovery.module';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
-
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
-
+    ConfigModule.forRoot({ isGlobal: true }),
     DatabaseModule,
-
     TestModule,
-
     BooksModule,
-
     ProcessingModule,
-
-    /*
-     * Canonical novel/story domain.
-     */
     NovelsModule,
-
-    /*
-     * Canonical publishing domain.
-     */
     PublishingModule,
     MediaModule,
     UploadsModule,
@@ -70,14 +56,9 @@ import { HealthModule } from './health/health.module';
     AiModule,
     MlopsModule,
     ContentModule,
-    /*
-     * Canonical author writing domain.
-     *
-     * This replaces the old standalone drafts/
-     * and chapters/ implementations.
-     */
-    WritingModule, 
-    HealthModule
+    WritingModule,
+    HealthModule,
+    AdminRecoveryModule,
   ],
 })
 export class AppModule {}
