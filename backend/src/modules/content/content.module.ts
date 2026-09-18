@@ -31,6 +31,10 @@ import {
 } from '../publishing/publishing.module';
 
 import {
+  MediaModule,
+} from '../media/media.module';
+
+import {
   ContentController,
 } from './content.controller';
 
@@ -91,6 +95,8 @@ import {
     NovelsModule,
 
     PublishingModule,
+
+    MediaModule,
   ],
 
   controllers: [

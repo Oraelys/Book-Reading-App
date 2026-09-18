@@ -7,13 +7,13 @@ import {
   ParseIntPipe,
   Post,
   Req,
-  UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 
 import {
-  FileInterceptor,
+  FileFieldsInterceptor,
 } from '@nestjs/platform-express';
 
 import {
@@ -51,16 +51,31 @@ export class ContentController {
   @Post('admin/import')
   @UseGuards(AdminContentGuard)
   @UseInterceptors(
-    FileInterceptor('file', {
-      limits: {
-        fileSize:
-          50 * 1024 * 1024,
+    FileFieldsInterceptor(
+      [
+        {
+          name: 'file',
+          maxCount: 1,
+        },
+        {
+          name: 'cover',
+          maxCount: 1,
+        },
+      ],
+      {
+        limits: {
+          fileSize:
+            50 * 1024 * 1024,
+        },
       },
-    }),
+    ),
   )
   async importBook(
-    @UploadedFile()
-    file: any,
+    @UploadedFiles()
+    files: {
+      file?: any[];
+      cover?: any[];
+    },
 
     @Body()
     body: {
@@ -74,9 +89,21 @@ export class ContentController {
     @Req()
     request: any,
   ) {
+    const file =
+      files?.file?.[0];
+
+    const cover =
+      files?.cover?.[0];
+
     if (!file) {
       throw new BadRequestException(
         'A manuscript file is required.',
+      );
+    }
+
+    if (!cover) {
+      throw new BadRequestException(
+        'A cover image is required.',
       );
     }
 
@@ -96,6 +123,7 @@ export class ContentController {
 
     return this.content.importBook(
       file,
+      cover,
       {
         title:
           body.title,
