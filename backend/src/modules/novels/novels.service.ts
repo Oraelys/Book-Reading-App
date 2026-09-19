@@ -100,6 +100,8 @@ export class NovelsService {
 
         is_public:
           false,
+
+        visibility: 'private',
       })
       .select()
       .single();

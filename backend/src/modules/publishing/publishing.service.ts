@@ -236,10 +236,12 @@ export class PublishingService {
     } = await supabase
       .from('novels')
       .update({
-        status: 'published',
-        is_public: true,
-        published_at: now,
-        updated_at: now,
+          status: 'published',
+          is_public: true,
+          visibility: 'public',
+          published_at: now,
+          last_published_at: now,
+          updated_at: now,
       })
       .eq(
         'id',
@@ -282,6 +284,8 @@ export class PublishingService {
       .update({
         status: 'draft',
         is_public: false,
+        visibility: 'private',
+        unpublished_at: now,
         updated_at: now,
       })
       .eq(
