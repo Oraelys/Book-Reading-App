@@ -1,0 +1,36 @@
+{
+  "name": "inkwell-admin-desktop",
+  "productName": "Inkwell Admin",
+  "version": "0.1.0",
+  "description": "Inkwell administration workstation (Electron)",
+  "main": "./out/main/index.js",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev --mode development",
+    "build": "npm run typecheck && electron-vite build --mode production",
+    "build:staging": "npm run typecheck && electron-vite build --mode staging",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "node --test scripts/",
+    "dist:win": "npm run build && electron-builder --win"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.103.1",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^44.4.3",
+    "electron-builder": "^26.0.0",
+    "electron-vite": "^5.0.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6"
+  }
+}
