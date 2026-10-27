@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
-import { StatusBar, StyleSheet, Text, View, Animated, Easing } from "react-native";
+import { StyleSheet, Text, View, Animated, Easing } from "react-native";
 import { useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 
 export default function SplashScreen() {
   const router = useRouter();
@@ -55,7 +56,7 @@ export default function SplashScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
+      <StatusBar style="light" />
       
       <Animated.View
         style={[

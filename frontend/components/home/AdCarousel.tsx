@@ -2,8 +2,9 @@
 import React, { memo, useRef, useState, useEffect, useCallback } from 'react';
 import {
   View, Text, Image, TouchableOpacity, FlatList,
-  StyleSheet, Dimensions, ViewToken,
+  StyleSheet, Dimensions,
 } from 'react-native';
+import type { FlatListProps } from 'react-native';
 import { Advertisement } from '@/types/home';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -45,13 +46,14 @@ const AdCarousel = memo(({ ads, onPress, theme }: AdCarouselProps) => {
   }, [startTimer, stopTimer]);
 
   const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (viewableItems.length > 0 && viewableItems[0].index !== null) {
-        setActiveIndex(viewableItems[0].index);
+    ({ viewableItems }) => {
+      const index = viewableItems[0]?.index;
+      if (typeof index === 'number') {
+        setActiveIndex(index);
       }
     },
     [],
-  );
+  ) satisfies NonNullable<FlatListProps<Advertisement>['onViewableItemsChanged']>;
 
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 60 }).current;
 

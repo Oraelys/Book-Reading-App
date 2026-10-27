@@ -2,8 +2,8 @@
 import * as CSS from 'csstype';
 import * as FileSystem from 'expo-file-system';
 import { Dispatch, SetStateAction, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { ActivityIndicator, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { WebView, type WebViewProps } from 'react-native-webview';
 import { WebViewErrorEvent, WebViewHttpErrorEvent, WebViewNavigationEvent, WebViewSource } from 'react-native-webview/lib/WebViewTypes';
 
 // expo-file-system v19's public types no longer expose the legacy API used by this
@@ -26,7 +26,7 @@ const EncodingType = LegacyFileSystem.EncodingType ?? { Base64: 'base64' };
 export type RenderType = 'DIRECT_URL' | 'DIRECT_BASE64' | 'BASE64_TO_LOCAL_PDF' | 'URL_TO_BASE64' | 'GOOGLE_READER' | 'GOOGLE_DRIVE_VIEWER';
 export interface CustomStyle { readerContainer?: CSS.Properties; readerContainerDocument?: CSS.Properties; readerContainerNumbers?: CSS.Properties; readerContainerNumbersContent?: CSS.Properties; readerContainerZoomContainer?: CSS.Properties; readerContainerZoomContainerButton?: CSS.Properties; readerContainerNavigate?: CSS.Properties; readerContainerNavigateArrow?: CSS.Properties; }
 export interface Source { uri?: string; base64?: string; headers?: { [key: string]: string } }
-export interface Props { source: Source; style?: View['props']['style']; webviewStyle?: WebView['props']['style']; webviewProps?: WebView['props']; noLoader?: boolean; customStyle?: CustomStyle; useGoogleDriveViewer?: boolean; useGoogleReader?: boolean; withScroll?: boolean; withPinchZoom?: boolean; maximumPinchZoomScale?: number; onLoad?: (event: WebViewNavigationEvent) => void; onLoadEnd?: (event: WebViewNavigationEvent | WebViewErrorEvent) => void; onError?: (event: WebViewErrorEvent | WebViewHttpErrorEvent | string) => void; }
+export interface Props { source: Source; style?: StyleProp<ViewStyle>; webviewStyle?: WebViewProps['style']; webviewProps?: WebViewProps; noLoader?: boolean; customStyle?: CustomStyle; useGoogleDriveViewer?: boolean; useGoogleReader?: boolean; withScroll?: boolean; withPinchZoom?: boolean; maximumPinchZoomScale?: number; onLoad?: (event: WebViewNavigationEvent) => void; onLoadEnd?: (event: WebViewNavigationEvent | WebViewErrorEvent) => void; onError?: (event: WebViewErrorEvent | WebViewHttpErrorEvent | string) => void; }
 
 const originWhitelist = ['http://*', 'https://*', 'file://*', 'data:*', 'content:*'];
 const htmlPath = `${cacheDirectory}index.html`;
@@ -48,7 +48,7 @@ const PdfViewer = ({ source, style, webviewStyle, webviewProps, noLoader = false
   useEffect(() => { if (source.uri || source.base64) { setReady(false); setRenderType(getRenderType({ source, useGoogleDriveViewer, useGoogleReader })); } }, [source.uri, source.base64]);
   const sourceToUse = useMemo(() => renderType && source ? getWebviewSource({ onError, renderType, source }) : undefined, [onError, renderType, source]);
   const isAndroid = useMemo(() => Platform.OS === 'android', []);
-  return ready ? <View style={[styles.container, style]}><WebView {...{ onError, onHttpError: onError, onLoad: event => { setRenderedOnce(true); onLoad?.(event); }, onLoadEnd, originWhitelist, source: renderedOnce || !isAndroid ? sourceToUse : undefined, style: [styles.webview, webviewStyle] }} allowFileAccess={isAndroid} allowFileAccessFromFileURLs={isAndroid} allowUniversalAccessFromFileURLs={isAndroid} scalesPageToFit={Platform.select({ android: false })} mixedContentMode={isAndroid ? 'always' : undefined} sharedCookiesEnabled={false} startInLoadingState={!noLoader} renderLoading={() => noLoader ? <View /> : <Loader />} {...webviewProps} /></View> : <View style={styles.loaderContainer}>{!noLoader && <Loader />}</View>;
+  return ready ? <View style={[styles.container, style]}><WebView {...{ onError, onHttpError: onError, onLoad: (event: WebViewNavigationEvent) => { setRenderedOnce(true); onLoad?.(event); }, onLoadEnd, originWhitelist, source: renderedOnce || !isAndroid ? sourceToUse : undefined, style: [styles.webview, webviewStyle] }} allowFileAccess={isAndroid} allowFileAccessFromFileURLs={isAndroid} allowUniversalAccessFromFileURLs={isAndroid} scalesPageToFit={Platform.select({ android: false })} mixedContentMode={isAndroid ? 'always' : undefined} sharedCookiesEnabled={false} startInLoadingState={!noLoader} renderLoading={() => noLoader ? <View /> : <Loader />} {...webviewProps} /></View> : <View style={styles.loaderContainer}>{!noLoader && <Loader />}</View>;
 };
 const styles = StyleSheet.create({ container: { flex: 1 }, loaderContainer: { alignItems: 'center', flex: 1, justifyContent: 'center' }, webview: { flex: 1 } });
 export default PdfViewer;

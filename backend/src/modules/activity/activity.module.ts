@@ -1,19 +1,19 @@
 import { Module } from '@nestjs/common';
 
 import { DatabaseModule } from '../database/database.module';
-import { EventsModule } from '../events/events.module';
+import { RecommendationsModule } from '../recommendations/recommendations.module';
+import { TrainingModule } from '../training/training.module';
+import { AdminContentGuard } from '../content/guards/admin-content.guard';
+import { WritingAuthGuard } from '../writing/guards/writing-auth.guard';
 
 import { ActivityController } from './activity.controller';
 import { ActivityService } from './activity.service';
-import { RecommendationsModule } from '../recommendations/recommendations.module';
-import { TrainingModule } from '../training/training.module';
 
 @Module({
   imports: [
     DatabaseModule,
-    EventsModule,
     RecommendationsModule,
-    TrainingModule
+    TrainingModule,
   ],
 
   controllers: [
@@ -22,6 +22,8 @@ import { TrainingModule } from '../training/training.module';
 
   providers: [
     ActivityService,
+    WritingAuthGuard,
+    AdminContentGuard,
   ],
 
   exports: [

@@ -1,7 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { SupabaseService } from '../database/supabase.service';
-import { EventsService } from '../events/events.service';
 import { TrainingService } from '../training/training.service';
 
 import { CreateActivityDto } from './dto/create-activity.dto';
@@ -10,23 +13,20 @@ import { CreateActivityDto } from './dto/create-activity.dto';
 export class ActivityService {
   constructor(
     private readonly database: SupabaseService,
-    private readonly events: EventsService,
     private readonly training: TrainingService,
   ) {}
 
-  /*
-   * =====================================
-   * Track Activity
-   * =====================================
+  /**
+   * Record activity for the authenticated user.
+   * userId comes from the controller's validated Supabase session.
    */
-
-  async track(dto: CreateActivityDto) {
+  async track(dto: CreateActivityDto, userId: string) {
     const supabase = this.database.getClient();
 
     const { data, error } = await supabase
       .from('user_activity_logs')
       .insert({
-        user_id: dto.userId,
+        user_id: userId,
         activity_type: dto.type,
         novel_id: dto.novelId,
         chapter_id: dto.chapterId,
@@ -36,47 +36,20 @@ export class ActivityService {
       .single();
 
     if (error) {
-      throw error;
+      throw new InternalServerErrorException('Unable to record activity.');
     }
 
-    /*
-     * Analytics + Notifications
-     */
-
-    await this.events.dispatch({
-      type: dto.type,
-      userId: dto.userId,
-      novelId: dto.novelId,
-      chapterId: dto.chapterId,
-      metadata: dto.metadata,
-    });
-
-    /*
-     * Queue AI Training
-     */
-
-    if (dto.userId) {
-      await this.training.enqueue(dto.userId);
-    }
-
-    /*
-     * Future integrations
-     */
-
-    // recommendation refresh
-    // achievement engine
-    // moderation pipeline
-    // ranking updates
+    // Queue training only for the authenticated user.
+    await this.training.enqueue(userId);
 
     return data;
   }
 
-  /*
-   * =====================================
-   * User Timeline
-   * =====================================
+  /**
+   * User timeline.
+   * The controller verifies that the caller owns this timeline
+   * or has the administrator role.
    */
-
   async history(userId: string) {
     const { data, error } = await this.database
       .getClient()
@@ -88,18 +61,18 @@ export class ActivityService {
       });
 
     if (error) {
-      throw error;
+      throw new InternalServerErrorException(
+        'Unable to retrieve activity history.',
+      );
     }
 
-    return data;
+    return data ?? [];
   }
 
-  /*
-   * =====================================
-   * Novel Activity
-   * =====================================
+  /**
+   * Cross-user activity for a novel.
+   * The controller restricts this endpoint to administrators.
    */
-
   async novelHistory(novelId: string) {
     const { data, error } = await this.database
       .getClient()
@@ -111,27 +84,35 @@ export class ActivityService {
       });
 
     if (error) {
-      throw error;
+      throw new InternalServerErrorException(
+        'Unable to retrieve novel activity.',
+      );
     }
 
-    return data;
+    return data ?? [];
   }
 
-  /*
-   * =====================================
-   * Delete Activity
-   * =====================================
+  /**
+   * Delete only a record owned by the authenticated user.
    */
-
-  async remove(id: string) {
-    const { error } = await this.database
+  async remove(id: string, userId: string) {
+    const { data, error } = await this.database
       .getClient()
       .from('user_activity_logs')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select('id')
+      .maybeSingle();
 
     if (error) {
-      throw error;
+      throw new InternalServerErrorException('Unable to delete activity.');
+    }
+
+    if (!data) {
+      throw new NotFoundException(
+        'Activity not found or you do not own this record.',
+      );
     }
 
     return {

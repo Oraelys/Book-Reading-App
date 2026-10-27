@@ -114,7 +114,7 @@ export const statusStyles = StyleSheet.create({
     height: '100%',
   },
   viewerOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
 
   progressRow: {
@@ -202,7 +202,7 @@ export const statusStyles = StyleSheet.create({
     height: '100%',
   },
   darkOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
 

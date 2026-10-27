@@ -11,8 +11,11 @@ import type { AppConfig } from '../config'
 import type { FilePicker } from '../files/file-picker'
 import { log } from '../logger'
 import { isTrustedUrl } from '../security'
+import type { AdminApi } from '../api/admin-api';
+import type { AdminDashboardOverview } from '../../shared/admin-types';
 
 export interface Services {
+  admin: AdminApi;
   config: AppConfig
   auth: AuthService
   content: ContentApi
@@ -81,7 +84,13 @@ function handle<A extends unknown[], T>(channel: string, schema: z.ZodType<A>, f
   })
 }
 
-export function registerIpc({ config, auth, content, imports, picker, system }: Services): void {
+export function registerIpc({ config, auth, content, imports, picker, system, admin }: Services): void {
+  handle(
+  IPC.adminDashboardOverview,
+  noArgs,
+  (): Promise<AdminDashboardOverview> => admin.dashboardOverview(),
+);
+
   handle(IPC.appInfo, noArgs, (): AppInfo => ({
     name: app.getName(),
     version: app.getVersion(),

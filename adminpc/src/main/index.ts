@@ -12,6 +12,8 @@ import { FileRegistry } from './files/file-registry'
 import { registerIpc } from './ipc/register'
 import { log } from './logger'
 import { installSecurity } from './security'
+import { AdminApi } from './api/admin-api';
+
 
 let mainWindow: BrowserWindow | null = null
 
@@ -71,6 +73,7 @@ if (!app.requestSingleInstanceLock()) {
       services = {
         config,
         auth,
+        admin: new AdminApi(api),
         content: new ContentApi(api),
         imports: new ImportService(config, auth, registry),
         picker: new FilePicker(registry, () => mainWindow),

@@ -1,92 +1,239 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Icon } from '../components/Icon'
-import { Tabs } from '../components/Tabs'
-import { EmptyState, ErrorNotice, LifecycleBadge, PageHeader, Spinner } from '../components/ui'
-import { formatDay, formatNumber } from '../lib/format'
-import { useBooks } from '../queries/books'
 
-/**
- * Every figure is computed from GET /content/admin/imported — the only admin data the backend
- * exposes — and labelled as such. Metrics with no backend source are listed as BACKEND GAP.
- */
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Icon } from '../components/Icon';
+import { Tabs } from '../components/Tabs';
+import {
+  EmptyState,
+  ErrorNotice,
+  LifecycleBadge,
+  PageHeader,
+  Spinner,
+} from '../components/ui';
+import { formatDay, formatNumber } from '../lib/format';
+import { useAdminDashboard } from '../queries/admin';
+import { useBooks } from '../queries/books';
+
+type DashboardTab = 'recent' | 'attention';
+
 export function Dashboard() {
-  const { data: books, isPending, error, refetch } = useBooks()
-  const [tab, setTab] = useState<'recent' | 'attention'>('recent')
+  const {
+    data: overview,
+    isPending: overviewPending,
+    error: overviewError,
+    refetch: refetchOverview,
+  } = useAdminDashboard();
 
-  if (isPending) return <Spinner />
-  if (error) return <ErrorNotice error={error} onRetry={() => void refetch()} />
+  const {
+    data: books,
+    isPending: booksPending,
+    error: booksError,
+    refetch: refetchBooks,
+  } = useBooks();
 
-  const published = books.filter((b) => b.status === 'published').length
-  const totalChapters = books.reduce((n, b) => n + b.totalChapters, 0)
-  const publishedChapters = books.reduce((n, b) => n + b.publishedChapters, 0)
-  const words = books.reduce((n, b) => n + (b.wordCount ?? 0), 0)
-  const recent = [...books].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')).slice(0, 6)
-  const attention = books.filter((b) => b.publishedChapters === 0)
-  const rows = tab === 'recent' ? recent : attention.slice(0, 6)
+  const [tab, setTab] = useState<DashboardTab>('recent');
+
+  if (overviewPending || booksPending) {
+    return <Spinner label="Loading dashboard…" />;
+  }
+
+  if (overviewError) {
+    return (
+      <ErrorNotice
+        error={overviewError}
+        onRetry={() => void refetchOverview()}
+      />
+    );
+  }
+
+  if (booksError) {
+    return (
+      <ErrorNotice
+        error={booksError}
+        onRetry={() => void refetchBooks()}
+      />
+    );
+  }
+
+  if (!overview || !books) {
+    return <EmptyState title="Dashboard data unavailable" />;
+  }
+
+  const publishedBooks = books.filter(
+    (book) => book.status === 'published',
+  ).length;
+
+  const totalImportedChapters = books.reduce(
+    (total, book) => total + book.totalChapters,
+    0,
+  );
+
+  const publishedImportedChapters = books.reduce(
+    (total, book) => total + book.publishedChapters,
+    0,
+  );
+
+  const importedWords = books.reduce(
+    (total, book) => total + (book.wordCount ?? 0),
+    0,
+  );
+
+  const recentBooks = [...books]
+    .sort((a, b) =>
+      (b.createdAt ?? '').localeCompare(a.createdAt ?? ''),
+    )
+    .slice(0, 6);
+
+  const attentionBooks = books.filter(
+    (book) => book.publishedChapters === 0,
+  );
+
+  const rows =
+    tab === 'recent' ? recentBooks : attentionBooks.slice(0, 6);
 
   return (
     <>
-      <PageHeader title="Dashboard" subtitle="Imported books, straight from the backend" />
+      <PageHeader
+        title="Dashboard"
+        subtitle="Platform overview and imported-book activity"
+      />
 
       <div className="stats">
-        <div className="stat-col">
-          <div className="stat stat-hero">
-            <div className="stat-title">Imported books</div>
-            <div className="stat-row">
-              <span className="stat-value stat-value-xl">{formatNumber(books.length)}</span>
-              <span className="pill-up"><Icon name="arrowUp" size={12} /> {published} published</span>
-            </div>
-          </div>
-        </div>
-        <Stat title="Chapters" value={formatNumber(publishedChapters)} sub={`published · ${formatNumber(totalChapters)} total`} />
-        <Stat title="Words" value={formatNumber(words)} sub="across imported books" />
-        <Stat title="Not published" value={formatNumber(books.length - published)} sub="draft or unpublished" />
+        <Stat
+          title="Platform users"
+          value={formatNumber(overview.totals.users)}
+          sub="Registered profiles"
+        />
+
+        <Stat
+          title="Platform novels"
+          value={formatNumber(overview.totals.novels)}
+          sub="All novels in the database"
+        />
+
+        <Stat
+          title="Platform chapters"
+          value={formatNumber(overview.totals.chapters)}
+          sub={`${formatNumber(overview.totals.publishedChapters)} published`}
+        />
+
+        <Stat
+          title="Imported books"
+          value={formatNumber(books.length)}
+          sub={`${formatNumber(publishedBooks)} published`}
+        />
+      </div>
+
+      <div className="stats">
+        <Stat
+          title="Imported chapters"
+          value={formatNumber(publishedImportedChapters)}
+          sub={`${formatNumber(totalImportedChapters)} total`}
+        />
+
+        <Stat
+          title="Imported words"
+          value={formatNumber(importedWords)}
+          sub="Only counts books returned by the import API"
+        />
+
+        <Stat
+          title="Imports needing attention"
+          value={formatNumber(attentionBooks.length)}
+          sub="Imported books with no published chapters"
+        />
       </div>
 
       <Link className="btn btn-outline stats-action" to="/books">
         View imported books <Icon name="arrowRight" size={15} />
       </Link>
 
-      <h2 className="section-title">Books</h2>
+      <h2 className="section-title">Imported books</h2>
+
       <Tabs
         value={tab}
         onChange={setTab}
         items={[
           { id: 'recent', label: 'Recently imported' },
-          { id: 'attention', label: 'No published chapter', count: attention.length }
+          {
+            id: 'attention',
+            label: 'No published chapter',
+            count: attentionBooks.length,
+          },
         ]}
       />
+
       <section className="card list-card">
         {rows.length === 0 ? (
-          <EmptyState title={tab === 'recent' ? 'No imported books yet' : 'Nothing waiting'}>
-            {tab === 'recent' ? 'Use Import book to add the first one.' : 'Every imported book has at least one published chapter.'}
+          <EmptyState
+            title={tab === 'recent' ? 'No imported books yet' : 'Nothing waiting'}
+          >
+            {tab === 'recent'
+              ? 'Use Import book to add the first one.'
+              : 'Every imported book has at least one published chapter.'}
           </EmptyState>
         ) : (
           <ul className="list">
-            {rows.map((b) => (
-              <li key={b.id}>
-                <Link to={`/books/${b.id}`}>{b.title}</Link>
-                <span className="muted small">{b.authorName} · {formatDay(b.createdAt)}</span>
-                <LifecycleBadge book={b} />
+            {rows.map((book) => (
+              <li key={book.id}>
+                <Link to={`/books/${book.id}`}>{book.title}</Link>
+                <span className="muted small">
+                  {book.authorName} · {formatDay(book.createdAt)}
+                </span>
+                <LifecycleBadge book={book} />
               </li>
             ))}
           </ul>
         )}
       </section>
 
-      <section className="card card-dashed">
-        <h2><span className="badge badge-gap">Backend gap</span> Not shown, on purpose</h2>
-        <p className="muted">
-          The backend has no admin endpoint for: total books including author-created, users, authors, platform activity, processing failures or
-          moderation. Nothing here is estimated — see the greyed modules in the rail for the contract each one needs.
-        </p>
+      <h2 className="section-title">Recent platform activity</h2>
+
+      <section className="card list-card">
+        {overview.recentActivity.length === 0 ? (
+          <EmptyState title="No activity recorded yet">
+            Activity will appear here once the backend records user events.
+          </EmptyState>
+        ) : (
+          <ul className="list">
+            {overview.recentActivity.map((activity) => (
+              <li key={activity.id}>
+                <strong>{formatActivityType(activity.activityType)}</strong>
+                <span className="muted small">
+                  {activity.createdAt
+                    ? new Date(activity.createdAt).toLocaleString()
+                    : 'Time unavailable'}
+                </span>
+                <span className="muted small">
+                  {activity.novelId
+                    ? `Novel: ${activity.novelId}`
+                    : activity.userId
+                      ? `User: ${activity.userId}`
+                      : 'Platform event'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
+
+      <p className="muted small">
+        Dashboard refreshed from the backend. Last response:{' '}
+        {new Date(overview.generatedAt).toLocaleString()}.
+      </p>
     </>
-  )
+  );
 }
 
-function Stat({ title, value, sub }: { title: string; value: string; sub: string }) {
+function Stat({
+  title,
+  value,
+  sub,
+}: {
+  title: string;
+  value: string;
+  sub: string;
+}) {
   return (
     <div className="stat-col">
       <div className="stat">
@@ -95,5 +242,11 @@ function Stat({ title, value, sub }: { title: string; value: string; sub: string
         <div className="muted small">{sub}</div>
       </div>
     </div>
-  )
+  );
+}
+
+function formatActivityType(value: string): string {
+  return value
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }

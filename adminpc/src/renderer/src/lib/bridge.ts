@@ -1,5 +1,6 @@
 import { AppError, type Result } from '../../../shared/errors'
 import type { ImportRequest, WindowAction } from '../../../shared/types'
+import type { AdminDashboardOverview } from '../../../shared/admin-types';
 
 async function unwrap<T>(pending: Promise<Result<T>>): Promise<T> {
   const result = await pending
@@ -9,6 +10,10 @@ async function unwrap<T>(pending: Promise<Result<T>>): Promise<T> {
 
 /** Promise-based wrapper over `window.inkwell` that throws AppError instead of returning Result. */
 export const api = {
+  admin: {
+  dashboardOverview: (): Promise<AdminDashboardOverview> =>
+    unwrap(window.inkwell.admin.dashboardOverview()),
+},
   appInfo: () => unwrap(window.inkwell.app.info()),
   health: () => unwrap(window.inkwell.system.health()),
   windowControl: (action: WindowAction) => unwrap(window.inkwell.window.control(action)),

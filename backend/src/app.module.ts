@@ -1,6 +1,5 @@
-import { ScheduleModule } from '@nestjs/schedule';
 import { Module } from '@nestjs/common';
-
+import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule } from '@nestjs/config';
 
 import { DatabaseModule } from './modules/database/database.module';
@@ -28,6 +27,8 @@ import { MlopsModule } from './modules/mlops/mlops.module';
 import { ContentModule } from './modules/content/content.module';
 import { WritingModule } from './modules/writing/writing.module';
 import { HealthModule } from './health/health.module';
+
+import { AdminModule } from './modules/admin/admin.module';
 import { AdminRecoveryModule } from './modules/admin/admin-recovery.module';
 
 @Module({
@@ -58,6 +59,7 @@ import { AdminRecoveryModule } from './modules/admin/admin-recovery.module';
     ContentModule,
     WritingModule,
     HealthModule,
+    AdminModule,
     AdminRecoveryModule,
   ],
 })

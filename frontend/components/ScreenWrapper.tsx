@@ -1,7 +1,8 @@
 import React from 'react'
-import { ImageBackground, Dimensions,Platform, Text, StyleSheet, View, StatusBar } from 'react-native'
+import { ImageBackground, Dimensions,Platform, Text, StyleSheet, View } from 'react-native'
 import { ScreenWrapperProps } from '@/types'
 import { colors } from '@/constants/theme'
+import { StatusBar } from 'expo-status-bar'
 
 const {height} = Dimensions.get("window")
 
@@ -36,7 +37,7 @@ function ScreenWrapper({
     flex: 1 
 },
      style]}>
-        <StatusBar barStyle={"light-content"} backgroundColor={"transparent"}/>
+        <StatusBar style="light" />
     {children}
   </View>
     </ImageBackground>

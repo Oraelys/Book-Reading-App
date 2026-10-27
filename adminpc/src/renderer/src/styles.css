@@ -15,7 +15,7 @@
   --dark: #202020;
   --dark2: #3a3a3a;
   --line: rgba(20, 20, 20, 0.10);
-  --edge: rgba(245, 245, 245, 0.46);
+  --edge: transparent;
   --green: #5f8f7c;
   --green-bg: rgba(88, 201, 158, 0.28);
   --rose: #a86f76;
@@ -77,7 +77,7 @@ code {
   font-size: 12px;
   background: rgba(20, 20, 20, 0.08);
   padding: 1px 4px;
-  border-radius: 6px;
+  border-radius: 2px;
 }
 
 .muted {
@@ -123,7 +123,7 @@ button {
 
 ::-webkit-scrollbar-thumb {
   background: rgba(255, 0, 0, 0);
-  border-radius: 8px;
+  border-radius: 2px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
@@ -161,7 +161,7 @@ button {
 .rail-capsule {
   background: rgba(245, 245, 245, 0.24);
   border: 1px solid var(--edge);
-  border-radius: 15px;
+  border-radius: 5px;
   padding: 7px;
   box-shadow: var(--raise-sm);
   display: flex;
@@ -181,7 +181,7 @@ button {
 
 .rail-pill {
   background: var(--dark);
-  border-radius: 13px;
+  border-radius: 4px;
   padding: 0.5%;
   display: flex;
   flex-direction: column;
@@ -218,7 +218,7 @@ button {
 .rail-btn {
   width: 2.5rem;
   height: 2.5rem;
-  border-radius: 9px;
+  border-radius: 3px;
   display: grid;
   place-items: center;
   color: #bdbdbd;
@@ -335,7 +335,7 @@ button {
 .icon-btn {
   width: 26px;
   height: 26px;
-  border-radius: 9px;
+  border-radius: 3px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.35);
   color: var(--ink2);
@@ -363,7 +363,7 @@ button {
   background: none;
   border: 0;
   padding: 4px 6px;
-  border-radius: 14px;
+  border-radius: 4px;
   cursor: pointer;
   text-align: left;
   color: inherit;
@@ -417,7 +417,7 @@ button {
   z-index: 20;
   background: var(--card-hi);
   border: 1px solid var(--edge);
-  border-radius: 14px;
+  border-radius: 4px;
   box-shadow: var(--raise);
   padding: 4px;
 }
@@ -428,7 +428,7 @@ button {
   background: none;
   border: 0;
   padding: 9px 12px;
-  border-radius: 10px;
+  border-radius: 3px;
   cursor: pointer;
   color: var(--ink);
 }
@@ -454,7 +454,7 @@ button {
   align-items: center;
   gap: 11px;
   padding: 10px 12px;
-  border-radius: 15px;
+  border-radius: 5px;
   color: var(--ink2);
   text-decoration: none;
   font-size: 14.5px;
@@ -468,7 +468,7 @@ button {
 .side-link.active {
   color: var(--ink);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(245, 245, 245, 0.28));
-  border-color: rgba(245, 245, 245, 0.56);
+  border-color: transparent;
   box-shadow:
     0 10px 20px -10px rgba(78, 78, 94, 0.5),
     inset 0 1px 0 #f3f3f3;
@@ -479,7 +479,7 @@ button {
   min-width: 24px;
   height: 22px;
   padding: 0 7px;
-  border-radius: 8px;
+  border-radius: 2px;
   background: rgba(20, 20, 20, 0.07);
   color: var(--muted);
   font-size: 12px;
@@ -532,7 +532,7 @@ button {
   overflow-y: auto;
   background: rgba(245, 245, 245, 0.24);
   border: 1px solid var(--edge);
-  border-radius: 18px;
+  border-radius: 5px;
   padding: 8px;
 }
 
@@ -550,7 +550,7 @@ button {
   padding: 8px 9px;
   border: 0;
   background: none;
-  border-radius: 10px;
+  border-radius: 3px;
   cursor: pointer;
   text-align: left;
   color: var(--ink);
@@ -584,9 +584,9 @@ button {
   margin: 10px 10px 10px 0;
   border-radius: 22px;
   overflow-y: auto;
-  background: linear-gradient(180deg, rgba(245, 245, 245, 0.28), rgba(245, 245, 245, 0.14));
+  background: var(--inset);
   border: 1px solid var(--edge);
-  box-shadow: inset 0 1px 0 #f3f3f3;
+  box-shadow: var(--pressed);
 }
 
 .panel.collapsed .main {
@@ -648,7 +648,7 @@ button {
 .card {
   background: linear-gradient(180deg, var(--card-hi), var(--card));
   border: 1px solid var(--edge);
-  border-radius: 22px;
+  border-radius: 7px;
   padding: 20px 22px;
   margin-bottom: 18px;
   box-shadow: var(--raise);
@@ -703,7 +703,7 @@ button {
 .stat {
   background: linear-gradient(180deg, var(--card-hi), var(--card));
   border: 1px solid var(--edge);
-  border-radius: 22px;
+  border-radius: 7px;
   padding: 18px 22px 20px;
   box-shadow: var(--raise);
 }
@@ -740,7 +740,7 @@ button {
   align-items: center;
   gap: 4px;
   padding: 5px 11px;
-  border-radius: 10px;
+  border-radius: 3px;
   background: var(--green-bg);
   color: var(--green);
   font-weight: 600;
@@ -845,7 +845,7 @@ button {
   text-decoration: none;
   cursor: pointer;
   padding: 9px 18px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(20, 20, 20, 0.13);
   background: linear-gradient(180deg, rgba(245, 245, 245, 0.40), rgba(255, 255, 255, 0.22));
   box-shadow:
@@ -899,7 +899,7 @@ button {
 .btn-small {
   padding: 4px 12px;
   font-size: 12px;
-  border-radius: 10px;
+  border-radius: 3px;
 }
 
 .btn-wide {
@@ -914,8 +914,8 @@ textarea {
   font: inherit;
   width: 100%;
   padding: 10px 14px;
-  border: 1px solid rgba(245, 245, 245, 0.38);
-  border-radius: 14px;
+  border: 1px solid transparent;
+  border-radius: 4px;
   background: var(--inset);
   color: inherit;
   box-shadow: var(--pressed);
@@ -1022,13 +1022,13 @@ select {
   bottom: -1px;
   height: 2px;
   background: var(--ink);
-  border-radius: 2px;
+  border-radius: 1px;
 }
 
 .tab-count {
   font-size: 11px;
   background: rgba(20, 20, 20, 0.08);
-  border-radius: 7px;
+  border-radius: 2px;
   padding: 0 6px;
 }
 
@@ -1037,7 +1037,7 @@ select {
   overflow-x: auto;
   background: linear-gradient(180deg, var(--card-hi), var(--card));
   border: 1px solid var(--edge);
-  border-radius: 22px;
+  border-radius: 7px;
   box-shadow: var(--raise);
 }
 
@@ -1099,7 +1099,7 @@ tr.clickable:hover td {
 .badge {
   display: inline-block;
   padding: 3px 10px;
-  border-radius: 9px;
+  border-radius: 3px;
   font-size: 11.5px;
   font-weight: 600;
   white-space: nowrap;
@@ -1143,7 +1143,7 @@ tr.clickable:hover td {
 
 .cover {
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: 2px;
   background: var(--inset);
   flex-shrink: 0;
   box-shadow: 0 4px 8px -3px var(--shade);
@@ -1157,7 +1157,7 @@ tr.clickable:hover td {
 .cover-lg {
   width: 132px;
   height: 192px;
-  border-radius: 12px;
+  border-radius: 4px;
 }
 
 .cover-empty {
@@ -1196,7 +1196,7 @@ tr.clickable:hover td {
   align-items: center;
   gap: 12px;
   padding: 13px 16px;
-  border-radius: 16px;
+  border-radius: 5px;
   margin: 12px 0;
 }
 
@@ -1231,7 +1231,7 @@ tr.clickable:hover td {
 
 .toast {
   padding: 11px 16px;
-  border-radius: 14px;
+  border-radius: 4px;
   color: #eeeeee;
   background: var(--dark);
   max-width: 380px;
@@ -1248,7 +1248,7 @@ tr.clickable:hover td {
 
 .dialog {
   border: 1px solid var(--edge);
-  border-radius: 24px;
+  border-radius: 7px;
   padding: 24px;
   width: 440px;
   max-width: 92vw;
@@ -1284,7 +1284,7 @@ tr.clickable:hover td {
   display: flex;
   flex-direction: column;
   box-shadow: -14px 0 50px rgba(30, 30, 40, 0.3);
-  border-radius: 26px 0 0 26px;
+  border-radius: 8px 0 0 8px;
 }
 
 .drawer-head {
@@ -1333,7 +1333,7 @@ tr.clickable:hover td {
   gap: 12px;
   padding: 14px;
   border: 1.5px dashed rgba(20, 20, 20, 0.18);
-  border-radius: 10px;
+  border-radius: 3px;
   margin-bottom: 12px;
 }
 
@@ -1345,7 +1345,7 @@ tr.clickable:hover td {
 
 .cover-preview {
   max-height: 260px;
-  border-radius: 10px;
+  border-radius: 3px;
   display: block;
   margin: 4px 0 8px;
   box-shadow: var(--raise-sm);
@@ -1362,7 +1362,7 @@ tr.clickable:hover td {
 
 .steps li {
   padding: 6px 13px;
-  border-radius: 10px;
+  border-radius: 3px;
   background: rgba(0, 0, 0, 0.05);
   color: var(--muted);
 }
@@ -1402,7 +1402,7 @@ progress {
   width: 390px;
   background: linear-gradient(180deg, var(--card-hi), var(--card));
   border: 1px solid var(--edge);
-  border-radius: 10px;
+  border-radius: 3px;
   padding: 34px 34px 30px;
   box-shadow:
     0 30px 60px -24px rgba(64, 64, 78, 0.5),
@@ -1421,7 +1421,7 @@ progress {
 .login-mark {
   width: 46px;
   height: 46px;
-  border-radius: 10px;
+  border-radius: 3px;
   background: var(--dark);
   color: #f3f3f3;
   display: grid;
