@@ -21,7 +21,11 @@ export function EmptyState({ title, children }: { title: string; children?: Reac
 }
 
 export function ErrorNotice({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
-  const message = error instanceof AppError ? error.message : 'Something went wrong.'
+  const message = error instanceof AppError
+    ? error.message
+    : import.meta.env.DEV && error instanceof Error
+      ? error.message
+      : 'Something went wrong.'
   return (
     <div className="notice notice-error" role="alert">
       <span>{message}</span>
