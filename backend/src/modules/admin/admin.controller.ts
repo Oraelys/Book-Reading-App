@@ -1,3 +1,4 @@
+
 import {
   Controller,
   Get,
@@ -5,7 +6,10 @@ import {
 } from '@nestjs/common';
 
 import { AdminContentGuard } from '../content/guards/admin-content.guard';
-import { AdminService } from './admin.service';
+import {
+  AdminDashboardOverview,
+  AdminService,
+} from './admin.service';
 
 @Controller('admin/dashboard')
 @UseGuards(AdminContentGuard)
@@ -15,7 +19,7 @@ export class AdminController {
   ) {}
 
   @Get()
-  getOverview() {
+  getOverview(): Promise<AdminDashboardOverview> {
     return this.adminService.getDashboardOverview();
   }
 }

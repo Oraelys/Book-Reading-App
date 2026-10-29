@@ -12,7 +12,11 @@ import type { FilePicker } from '../files/file-picker'
 import { log } from '../logger'
 import { isTrustedUrl } from '../security'
 import type { AdminApi } from '../api/admin-api';
-import type { AdminDashboardOverview } from '../../shared/admin-types';
+import type {
+  AdminDashboardOverview,
+  AdminUserRole,
+  AdminUsersResponse,
+} from '../../shared/admin-types';
 
 export interface Services {
   admin: AdminApi;
@@ -47,6 +51,10 @@ const importArgs = z.tuple([
     })
     .strict()
 ])
+const userRoleArgs = z.tuple([
+  z.string().trim().max(100),
+  z.enum(['all', 'reader', 'author', 'admin']),
+]);
 
 function serialize(e: unknown, channel: string): SerializedAppError {
   if (e instanceof AppError) {
@@ -89,6 +97,16 @@ export function registerIpc({ config, auth, content, imports, picker, system, ad
   IPC.adminDashboardOverview,
   noArgs,
   (): Promise<AdminDashboardOverview> => admin.dashboardOverview(),
+);
+handle(
+  IPC.adminUsersList,
+  userRoleArgs,
+  (
+    _event,
+    search,
+    role,
+  ): Promise<AdminUsersResponse> =>
+    admin.listUsers(search, role as AdminUserRole | 'all'),
 );
 
   handle(IPC.appInfo, noArgs, (): AppInfo => ({

@@ -1,5 +1,8 @@
 import type { Result } from './errors'
-import type { AdminDashboardOverview } from './admin-types';
+import type { AdminDashboardOverview,
+    AdminUserRole,
+  AdminUsersResponse,
+ } from './admin-types';
 import type {
   AppInfo,
   AuthState,
@@ -18,6 +21,7 @@ import type {
 
 /** Every IPC channel that exists. Anything not listed here is not reachable from the renderer. */
 export const IPC = {
+  adminUsersList: 'admin:users-list',
   adminDashboardOverview: 'admin:dashboard-overview',
   appInfo: 'app:info',
   authGetState: 'auth:get-state',
@@ -49,8 +53,12 @@ export type Unsubscribe = () => void
  * Note there is no generic "request(path)" – the renderer can only invoke named operations.
  */
 export interface InkwellBridge {
-  admin: {
+admin: {
   dashboardOverview(): Promise<Result<AdminDashboardOverview>>;
+  listUsers(
+    search: string,
+    role: AdminUserRole | 'all',
+  ): Promise<Result<AdminUsersResponse>>;
 };
   app: { info(): Promise<Result<AppInfo>> }
   system: { health(): Promise<Result<HealthStatus>> }
@@ -83,4 +91,5 @@ export interface InkwellBridge {
     cancel(): Promise<Result<null>>
     onProgress(cb: (progress: ImportProgress) => void): Unsubscribe
   }
+  
 }

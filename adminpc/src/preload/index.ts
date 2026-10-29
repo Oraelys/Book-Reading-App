@@ -1,8 +1,10 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { IPC, type InkwellBridge, type Unsubscribe } from '../shared/ipc'
 import type { AuthState, ImportProgress } from '../shared/types'
-import type { AdminDashboardOverview } from '../shared/admin-types';
-
+import type {
+  AdminDashboardOverview,
+  AdminUserRole,
+} from '../shared/admin-types';
 /**
  * The only thing the renderer can reach. `ipcRenderer` itself is never exposed, and there is no
  * generic "send/invoke by channel name" – each entry is a fixed channel with fixed arguments.
@@ -18,6 +20,8 @@ const bridge: InkwellBridge = {
   admin: {
   dashboardOverview: () =>
     ipcRenderer.invoke(IPC.adminDashboardOverview),
+  listUsers: (search: string, role: AdminUserRole | 'all') =>
+  ipcRenderer.invoke(IPC.adminUsersList, search, role),
 },
   app: { info: () => ipcRenderer.invoke(IPC.appInfo) },
   system: { health: () => ipcRenderer.invoke(IPC.systemHealth) },
