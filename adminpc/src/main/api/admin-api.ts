@@ -218,7 +218,7 @@ export class AdminApi {
         };
       }),
       roleChanges: raw.roleChanges.map((value): AdminUserRoleAuditItem => {
-        if (!isRaw(value) || typeof value.id !== 'number' || typeof value.actorUserId !== 'string') {
+        if (!isRaw(value) || typeof value.id !== 'string' || typeof value.actorUserId !== 'string') {
           throw new AppError({ kind: 'unknown', message: 'The server returned invalid role audit data.' });
         }
         if (typeof value.previousRole !== 'string' || !allowedRoles.includes(value.previousRole as AdminUserRole) || typeof value.newRole !== 'string' || !allowedRoles.includes(value.newRole as AdminUserRole)) {
