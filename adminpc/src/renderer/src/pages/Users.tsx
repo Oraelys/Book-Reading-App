@@ -121,7 +121,6 @@ export function Users() {
           </div>
           {selectedUserId && (
             <UserDetailsPanel
-              userId={selectedUserId}
               onClose={() => setSelectedUserId(null)}
               query={details}
             />
@@ -132,8 +131,7 @@ export function Users() {
   );
 }
 
-function UserDetailsPanel({ userId, onClose, query }: {
-  userId: string;
+function UserDetailsPanel({ onClose, query }: {
   onClose: () => void;
   query: ReturnType<typeof useAdminUserDetails>;
 }) {
