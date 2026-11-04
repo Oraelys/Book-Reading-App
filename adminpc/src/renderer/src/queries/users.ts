@@ -20,6 +20,15 @@ export function useAdminUsers(
 }
 
 
+export function useAdminUserDetails(userId: string | null) {
+  return useQuery({
+    queryKey: ['admin', 'user-details', userId],
+    queryFn: () => api.admin.getUserDetails(userId as string),
+    enabled: Boolean(userId),
+    staleTime: 15_000,
+  });
+}
+
 export function useChangeAdminUserRole() {
   const queryClient = useQueryClient();
   return useMutation({
