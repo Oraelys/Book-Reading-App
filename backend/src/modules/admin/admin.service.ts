@@ -247,7 +247,7 @@ export class AdminService {
         throw new NotFoundException('The selected user no longer exists.');
       }
       if (error.code === '42501' || error.code === '23514' || error.code === '22023') {
-        throw new (await import('@nestjs/common')).BadRequestException(error.message);
+        throw new BadRequestException(error.message);
       }
       throw new InternalServerErrorException('Unable to update the user role.');
     }
