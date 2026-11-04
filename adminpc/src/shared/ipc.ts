@@ -2,6 +2,7 @@ import type { Result } from './errors'
 import type { AdminDashboardOverview,
     AdminUserRole,
   AdminUsersResponse,
+  AdminRoleChangeResponse,
  } from './admin-types';
 import type {
   AppInfo,
