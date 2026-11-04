@@ -1,18 +1,17 @@
-
 import {
+  BadRequestException,
+  Body,
   Controller,
   Get,
   Post,
-  Body,
-  BadRequestException,
-  Req,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 
 import { AdminContentGuard } from '../content/guards/admin-content.guard';
 import { AdminService } from './admin.service';
-import type { Request } from 'express';
 
 @Controller('admin/users')
 @UseGuards(AdminContentGuard)
@@ -24,7 +23,8 @@ export class AdminUsersController {
     @Query('search') search?: string,
     @Query('role') role?: string,
   ) {
-    return this.adminService.listU
+    return this.adminService.listUsers(search, role);
+  }
 
   @Post('role')
   changeRole(
@@ -40,7 +40,5 @@ export class AdminUsersController {
     }
 
     return this.adminService.changeUserRole(request.user.id, body.userId, body.role);
-  }
-sers(search, role);
   }
 }
