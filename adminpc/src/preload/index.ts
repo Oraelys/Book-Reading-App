@@ -21,7 +21,9 @@ const bridge: InkwellBridge = {
   dashboardOverview: () =>
     ipcRenderer.invoke(IPC.adminDashboardOverview),
   listUsers: (search: string, role: AdminUserRole | 'all') =>
-  ipcRenderer.invoke(IPC.adminUsersList, search, role),
+    ipcRenderer.invoke(IPC.adminUsersList, search, role),
+  changeUserRole: (userId: string, role: AdminUserRole) =>
+    ipcRenderer.invoke(IPC.adminUserRoleChange, userId, role),
 },
   app: { info: () => ipcRenderer.invoke(IPC.appInfo) },
   system: { health: () => ipcRenderer.invoke(IPC.systemHealth) },
