@@ -179,6 +179,27 @@ function UserDetailsPanel({ userId, onClose, query }: {
           </table>
         </div>
       )}
+
+      <h3>Role-change audit</h3>
+      {query.data.roleChanges.length === 0 ? (
+        <EmptyState title="No role changes recorded" />
+      ) : (
+        <div className="table-wrap">
+          <table className="table">
+            <thead><tr><th>Previous role</th><th>New role</th><th>Changed by (admin ID)</th><th>When</th></tr></thead>
+            <tbody>
+              {query.data.roleChanges.map((change) => (
+                <tr key={change.id}>
+                  <td>{roleLabel(change.previousRole)}</td>
+                  <td>{roleLabel(change.newRole)}</td>
+                  <td className="muted small">{change.actorUserId}</td>
+                  <td>{formatDay(change.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }
