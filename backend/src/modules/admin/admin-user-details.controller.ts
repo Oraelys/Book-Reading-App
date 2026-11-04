@@ -76,7 +76,7 @@ export class AdminUserDetailsController {
         createdAt: item.created_at ?? null,
       })),
       roleChanges: (roleAuditResult.data ?? []).map((item) => ({
-        id: item.id,
+        id: String(item.id),
         actorUserId: item.actor_user_id,
         previousRole: item.previous_role,
         newRole: item.new_role,
