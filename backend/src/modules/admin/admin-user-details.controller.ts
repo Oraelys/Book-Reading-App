@@ -23,7 +23,7 @@ export class AdminUserDetailsController {
     }
 
     const supabase = this.database.getClient();
-    const [profileResult, activityResult] = await Promise.all([
+    const [profileResult, activityResult, roleAuditResult] = await Promise.all([
       supabase
         .from('profiles')
         .select('id, username, user_tag, email, role, is_public, bio, avatar_url, created_at, updated_at')
@@ -35,6 +35,12 @@ export class AdminUserDetailsController {
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(50),
+      supabase
+        .from('admin_role_audit_logs')
+        .select('id, actor_user_id, previous_role, new_role, created_at')
+        .eq('target_user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(50),
     ]);
 
     if (profileResult.error) {
@@ -43,8 +49,8 @@ export class AdminUserDetailsController {
     if (!profileResult.data) {
       throw new NotFoundException('User not found.');
     }
-    if (activityResult.error) {
-      throw new Error('Unable to retrieve user activity.');
+    if (activityResult.error || roleAuditResult.error) {
+      throw new Error('Unable to retrieve user history.');
     }
 
     const profile = profileResult.data;
@@ -68,6 +74,13 @@ export class AdminUserDetailsController {
         chapterId: item.chapter_id ?? null,
         metadata: item.metadata ?? null,
         createdAt: item.created_at ?? null,
+      })),
+      roleChanges: (roleAuditResult.data ?? []).map((item) => ({
+        id: item.id,
+        actorUserId: item.actor_user_id,
+        previousRole: item.previous_role,
+        newRole: item.new_role,
+        createdAt: item.created_at,
       })),
       activityLimit: 50,
     };
