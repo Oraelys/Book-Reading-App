@@ -1,7 +1,9 @@
 
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
+  NotFoundException,
   Logger,
 } from '@nestjs/common';
 
@@ -225,7 +227,7 @@ export class AdminService {
   ): Promise<{ userId: string; previousRole: string; newRole: string; changedAt: string }> {
     const allowedRoles = ['reader', 'author', 'admin'];
     if (!allowedRoles.includes(role)) {
-      throw new (await import('@nestjs/common')).BadRequestException('Choose a valid user role.');
+      throw new BadRequestException('Choose a valid user role.');
     }
 
     const { data, error } = await this.database.getClient().rpc(
@@ -242,7 +244,7 @@ export class AdminService {
         `Admin role change failed: ${error.message} (code: ${error.code ?? 'unknown'})`,
       );
       if (error.code === 'P0002') {
-        throw new (await import('@nestjs/common')).NotFoundException('The selected user no longer exists.');
+        throw new NotFoundException('The selected user no longer exists.');
       }
       if (error.code === '42501' || error.code === '23514' || error.code === '22023') {
         throw new (await import('@nestjs/common')).BadRequestException(error.message);
