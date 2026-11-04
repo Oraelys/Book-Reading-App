@@ -7,6 +7,7 @@ import type {
   AdminUsersResponse,
   AdminRoleChangeResponse,
   AdminUserDetailsResponse,
+  AdminUserRoleAuditItem,
 } from '../../shared/admin-types';
 import type { ApiClient } from './api-client';
 
@@ -175,6 +176,7 @@ export class AdminApi {
       !isRaw(raw.user) ||
       typeof raw.user.id !== 'string' ||
       !Array.isArray(raw.activity) ||
+      !Array.isArray(raw.roleChanges) ||
       typeof raw.activityLimit !== 'number'
     ) {
       throw new AppError({
@@ -212,6 +214,21 @@ export class AdminApi {
           novelId: textOrNull(value.novelId),
           chapterId: textOrNull(value.chapterId),
           metadata: isRaw(value.metadata) ? value.metadata : null,
+          createdAt: textOrNull(value.createdAt),
+        };
+      }),
+      roleChanges: raw.roleChanges.map((value): AdminUserRoleAuditItem => {
+        if (!isRaw(value) || typeof value.id !== 'number' || typeof value.actorUserId !== 'string') {
+          throw new AppError({ kind: 'unknown', message: 'The server returned invalid role audit data.' });
+        }
+        if (typeof value.previousRole !== 'string' || !allowedRoles.includes(value.previousRole as AdminUserRole) || typeof value.newRole !== 'string' || !allowedRoles.includes(value.newRole as AdminUserRole)) {
+          throw new AppError({ kind: 'unknown', message: 'The server returned invalid role audit data.' });
+        }
+        return {
+          id: value.id,
+          actorUserId: value.actorUserId,
+          previousRole: value.previousRole as AdminUserRole,
+          newRole: value.newRole as AdminUserRole,
           createdAt: textOrNull(value.createdAt),
         };
       }),
