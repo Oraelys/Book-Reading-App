@@ -10,6 +10,7 @@ export interface RequestOptions {
   method: 'GET' | 'POST'
   /** Path beginning with "/". Built by API wrappers from validated IDs only. */
   path: string
+  body?: unknown
   timeoutMs?: number
 }
 
@@ -94,9 +95,11 @@ export class ApiClient {
         `${this.config.apiUrl}${opts.path}`,
         {
           method: opts.method,
+          ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
           headers: {
             Authorization: `Bearer ${token}`,
-            Accept: 'application/json'
+            Accept: 'application/json',
+            ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {})
           },
           redirect: 'error',
           signal: controller.signal
