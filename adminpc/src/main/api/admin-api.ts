@@ -5,6 +5,7 @@ import type {
   AdminDashboardOverview,
   AdminUserRole,
   AdminUsersResponse,
+  AdminRoleChangeResponse,
 } from '../../shared/admin-types';
 import type { ApiClient } from './api-client';
 
@@ -161,4 +162,44 @@ export class AdminApi {
     limit: count(raw.limit),
   };
 }
+
+  async changeUserRole(userId: string, role: AdminUserRole): Promise<AdminRoleChangeResponse> {
+    const raw = await this.api.request({
+      method: 'POST',
+      path: '/admin/users/role',
+      body: { userId, role },
+    });
+
+    if (
+      !isRaw(raw) ||
+      typeof raw.userId !== 'string' ||
+      typeof raw.previousRole !== 'string' ||
+      typeof raw.newRole !== 'string' ||
+      typeof raw.changedAt !== 'string'
+    ) {
+      throw new AppError({
+        kind: 'unknown',
+        message: 'The server returned an invalid role-change response.',
+      });
+    }
+
+    const validRoles: AdminUserRole[] = ['reader', 'author', 'admin'];
+    if (
+      !validRoles.includes(raw.previousRole as AdminUserRole) ||
+      !validRoles.includes(raw.newRole as AdminUserRole)
+    ) {
+      throw new AppError({
+        kind: 'unknown',
+        message: 'The server returned an invalid user role.',
+      });
+    }
+
+    return {
+      userId: raw.userId,
+      previousRole: raw.previousRole as AdminUserRole,
+      newRole: raw.newRole as AdminUserRole,
+      changedAt: raw.changedAt,
+    };
+  }
+
 }
