@@ -56,11 +56,20 @@ export interface AdminUserActivityItem {
   createdAt: string | null;
 }
 
+export interface AdminUserRoleAuditItem {
+  id: number;
+  actorUserId: string;
+  previousRole: AdminUserRole;
+  newRole: AdminUserRole;
+  createdAt: string | null;
+}
+
 export interface AdminUserDetailsResponse {
   user: AdminUser & {
     bio: string | null;
     updatedAt: string | null;
   };
   activity: AdminUserActivityItem[];
+  roleChanges: AdminUserRoleAuditItem[];
   activityLimit: number;
 }
