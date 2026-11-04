@@ -24,6 +24,9 @@ admin: {
     role: AdminUserRole | 'all',
   ): Promise<AdminUsersResponse> =>
     unwrap(window.inkwell.admin.listUsers(search, role)),
+
+  changeUserRole: (userId: string, role: AdminUserRole): Promise<AdminRoleChangeResponse> =>
+    unwrap(window.inkwell.admin.changeUserRole(userId, role)),
 },
   appInfo: () => unwrap(window.inkwell.app.info()),
   health: () => unwrap(window.inkwell.system.health()),
