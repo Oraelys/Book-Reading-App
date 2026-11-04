@@ -6,6 +6,7 @@ import type {
   AdminUserRole,
   AdminUsersResponse,
   AdminRoleChangeResponse,
+  AdminUserDetailsResponse,
 } from '../../shared/admin-types';
 import type { ApiClient } from './api-client';
 
@@ -162,6 +163,61 @@ export class AdminApi {
     limit: count(raw.limit),
   };
 }
+
+  async getUserDetails(userId: string): Promise<AdminUserDetailsResponse> {
+    const raw = await this.api.request({
+      method: 'GET',
+      path: `/admin/users/${encodeURIComponent(userId)}`,
+    });
+
+    if (
+      !isRaw(raw) ||
+      !isRaw(raw.user) ||
+      typeof raw.user.id !== 'string' ||
+      !Array.isArray(raw.activity) ||
+      typeof raw.activityLimit !== 'number'
+    ) {
+      throw new AppError({
+        kind: 'unknown',
+        message: 'The server returned invalid user details.',
+      });
+    }
+
+    const allowedRoles: AdminUserRole[] = ['reader', 'author', 'admin'];
+    const userRole = raw.user.role;
+    if (typeof userRole !== 'string' || !allowedRoles.includes(userRole as AdminUserRole)) {
+      throw new AppError({ kind: 'unknown', message: 'The server returned an invalid user role.' });
+    }
+
+    return {
+      user: {
+        id: raw.user.id,
+        username: textOrNull(raw.user.username),
+        userTag: textOrNull(raw.user.userTag),
+        email: textOrNull(raw.user.email),
+        role: userRole as AdminUserRole,
+        isPublic: typeof raw.user.isPublic === 'boolean' ? raw.user.isPublic : null,
+        bio: textOrNull(raw.user.bio),
+        avatarUrl: textOrNull(raw.user.avatarUrl),
+        createdAt: textOrNull(raw.user.createdAt),
+        updatedAt: textOrNull(raw.user.updatedAt),
+      },
+      activity: raw.activity.map((value) => {
+        if (!isRaw(value) || typeof value.id !== 'string') {
+          throw new AppError({ kind: 'unknown', message: 'The server returned invalid user activity.' });
+        }
+        return {
+          id: value.id,
+          activityType: textOrNull(value.activityType) ?? 'unknown',
+          novelId: textOrNull(value.novelId),
+          chapterId: textOrNull(value.chapterId),
+          metadata: isRaw(value.metadata) ? value.metadata : null,
+          createdAt: textOrNull(value.createdAt),
+        };
+      }),
+      activityLimit: count(raw.activityLimit),
+    };
+  }
 
   async changeUserRole(userId: string, role: AdminUserRole): Promise<AdminRoleChangeResponse> {
     const raw = await this.api.request({
