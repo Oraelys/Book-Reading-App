@@ -57,7 +57,7 @@ export interface AdminUserActivityItem {
 }
 
 export interface AdminUserRoleAuditItem {
-  id: number;
+  id: string;
   actorUserId: string;
   previousRole: AdminUserRole;
   newRole: AdminUserRole;
