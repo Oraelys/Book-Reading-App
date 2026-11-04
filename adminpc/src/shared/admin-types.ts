@@ -45,3 +45,22 @@ export interface AdminRoleChangeResponse {
   newRole: AdminUserRole;
   changedAt: string;
 }
+
+
+export interface AdminUserActivityItem {
+  id: string;
+  activityType: string;
+  novelId: string | null;
+  chapterId: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string | null;
+}
+
+export interface AdminUserDetailsResponse {
+  user: AdminUser & {
+    bio: string | null;
+    updatedAt: string | null;
+  };
+  activity: AdminUserActivityItem[];
+  activityLimit: number;
+}
