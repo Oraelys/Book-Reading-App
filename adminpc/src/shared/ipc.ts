@@ -22,6 +22,7 @@ import type {
 /** Every IPC channel that exists. Anything not listed here is not reachable from the renderer. */
 export const IPC = {
   adminUsersList: 'admin:users-list',
+  adminUserRoleChange: 'admin:user-role-change',
   adminDashboardOverview: 'admin:dashboard-overview',
   appInfo: 'app:info',
   authGetState: 'auth:get-state',
@@ -59,6 +60,7 @@ admin: {
     search: string,
     role: AdminUserRole | 'all',
   ): Promise<Result<AdminUsersResponse>>;
+  changeUserRole(userId: string, role: AdminUserRole): Promise<Result<AdminRoleChangeResponse>>;
 };
   app: { info(): Promise<Result<AppInfo>> }
   system: { health(): Promise<Result<HealthStatus>> }
