@@ -38,3 +38,10 @@ export interface AdminUsersResponse {
   total: number;
   limit: number;
 }
+
+export interface AdminRoleChangeResponse {
+  userId: string;
+  previousRole: AdminUserRole;
+  newRole: AdminUserRole;
+  changedAt: string;
+}

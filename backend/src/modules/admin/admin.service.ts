@@ -1,7 +1,9 @@
 
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
+  NotFoundException,
   Logger,
 } from '@nestjs/common';
 
@@ -217,4 +219,50 @@ export class AdminService {
     limit,
   };
 }
+
+  async changeUserRole(
+    actorUserId: string,
+    targetUserId: string,
+    role: string,
+  ): Promise<{ userId: string; previousRole: string; newRole: string; changedAt: string }> {
+    const allowedRoles = ['reader', 'author', 'admin'];
+    if (!allowedRoles.includes(role)) {
+      throw new BadRequestException('Choose a valid user role.');
+    }
+
+    const { data, error } = await this.database.getClient().rpc(
+      'admin_change_profile_role',
+      {
+        p_actor_user_id: actorUserId,
+        p_target_user_id: targetUserId,
+        p_new_role: role,
+      },
+    );
+
+    if (error) {
+      this.logger.error(
+        `Admin role change failed: ${error.message} (code: ${error.code ?? 'unknown'})`,
+      );
+      if (error.code === 'P0002') {
+        throw new NotFoundException('The selected user no longer exists.');
+      }
+      if (error.code === '42501' || error.code === '23514' || error.code === '22023') {
+        throw new BadRequestException(error.message);
+      }
+      throw new InternalServerErrorException('Unable to update the user role.');
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || typeof row.user_id !== 'string') {
+      throw new InternalServerErrorException('The server returned an invalid role-change response.');
+    }
+
+    return {
+      userId: row.user_id,
+      previousRole: row.previous_role,
+      newRole: row.new_role,
+      changedAt: row.changed_at,
+    };
+  }
+
 }

@@ -16,6 +16,7 @@ import type {
   AdminDashboardOverview,
   AdminUserRole,
   AdminUsersResponse,
+  AdminRoleChangeResponse,
 } from '../../shared/admin-types';
 
 export interface Services {
@@ -51,6 +52,7 @@ const importArgs = z.tuple([
     })
     .strict()
 ])
+const userRoleChangeArgs = z.tuple([id, z.enum(['reader', 'author', 'admin'])]);
 const userRoleArgs = z.tuple([
   z.string().trim().max(100),
   z.enum(['all', 'reader', 'author', 'admin']),
@@ -97,6 +99,12 @@ export function registerIpc({ config, auth, content, imports, picker, system, ad
   IPC.adminDashboardOverview,
   noArgs,
   (): Promise<AdminDashboardOverview> => admin.dashboardOverview(),
+);
+handle(
+  IPC.adminUserRoleChange,
+  userRoleChangeArgs,
+  (_event, userId, role): Promise<AdminRoleChangeResponse> =>
+    admin.changeUserRole(userId, role),
 );
 handle(
   IPC.adminUsersList,
