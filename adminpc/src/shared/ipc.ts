@@ -3,6 +3,7 @@ import type { AdminDashboardOverview,
     AdminUserRole,
   AdminUsersResponse,
   AdminRoleChangeResponse,
+  AdminUserDetailsResponse,
  } from './admin-types';
 import type {
   AppInfo,
@@ -24,6 +25,7 @@ import type {
 export const IPC = {
   adminUsersList: 'admin:users-list',
   adminUserRoleChange: 'admin:user-role-change',
+  adminUserDetails: 'admin:user-details',
   adminDashboardOverview: 'admin:dashboard-overview',
   appInfo: 'app:info',
   authGetState: 'auth:get-state',
@@ -62,6 +64,7 @@ admin: {
     role: AdminUserRole | 'all',
   ): Promise<Result<AdminUsersResponse>>;
   changeUserRole(userId: string, role: AdminUserRole): Promise<Result<AdminRoleChangeResponse>>;
+  getUserDetails(userId: string): Promise<Result<AdminUserDetailsResponse>>;
 };
   app: { info(): Promise<Result<AppInfo>> }
   system: { health(): Promise<Result<HealthStatus>> }
