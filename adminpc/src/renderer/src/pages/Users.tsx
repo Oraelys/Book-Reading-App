@@ -3,7 +3,7 @@ import { useState } from 'react';
 import type { AdminUserRole } from '../../../shared/admin-types';
 import { EmptyState, ErrorNotice, PageHeader, Spinner } from '../components/ui';
 import { formatDay, formatNumber } from '../lib/format';
-import { useAdminUsers } from '../queries/users';
+import { useAdminUsers, useChangeAdminUserRole } from '../queries/users';
 
 type RoleFilter = AdminUserRole | 'all';
 
@@ -115,6 +115,7 @@ export function Users() {
                   <th>Role</th>
                   <th>Profile visibility</th>
                   <th>Registered</th>
+                  <th>Manage role</th>
                 </tr>
               </thead>
 
@@ -145,6 +146,7 @@ export function Users() {
                     </td>
 
                     <td>{formatDay(user.createdAt)}</td>
+                    <td><UserRoleControl user={user} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -176,4 +178,27 @@ function roleBadge(role: AdminUserRole): string {
     default:
       return 'badge-draft';
   }
+}
+
+
+function UserRoleControl({ user }: { user: import('../../../shared/admin-types').AdminUser }) {
+  const [role, setRole] = useState<AdminUserRole>(user.role);
+  const mutation = useChangeAdminUserRole();
+
+  return (
+    <div className="user-role-control">
+      <select value={role} onChange={(event) => setRole(event.target.value as AdminUserRole)} disabled={mutation.isPending} aria-label={'Role for ' + (user.username || user.id)}>
+        <option value="reader">Reader</option>
+        <option value="author">Author</option>
+        <option value="admin">Administrator</option>
+      </select>
+      <button className="btn btn-small btn-outline" disabled={role === user.role || mutation.isPending} onClick={() => {
+        if (window.confirm('Change ' + (user.username || 'this user') + ' from ' + roleLabel(user.role) + ' to ' + roleLabel(role) + '? This action is audited.')) {
+          mutation.mutate({ userId: user.id, role });
+        }
+      }}>{mutation.isPending ? 'Saving…' : 'Save'}</button>
+      {mutation.isError && <ErrorNotice error={mutation.error} />}
+      {mutation.isSuccess && <span className="muted small">Updated</span>}
+    </div>
+  );
 }
