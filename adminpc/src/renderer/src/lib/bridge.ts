@@ -4,6 +4,7 @@ import type {
   AdminDashboardOverview,
   AdminUserRole,
   AdminUsersResponse,
+  AdminRoleChangeResponse,
 } from '../../../shared/admin-types';
 
 async function unwrap<T>(pending: Promise<Result<T>>): Promise<T> {
