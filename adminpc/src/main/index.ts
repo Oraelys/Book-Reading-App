@@ -24,9 +24,10 @@ function createWindow(): BrowserWindow {
     minWidth: 1024,
     minHeight: 680,
     show: false,
-    backgroundColor: '#d3d3d6',
-    title: 'Inkwell Admin',
-    frame: false, // custom window chrome (see WindowControls in the renderer)
+    backgroundColor: '#101214',
+    title: 'Inkverse Admin',
+    // Keep the native Windows frame: its real maximise button exposes Windows Snap Layouts.
+    frame: true,
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

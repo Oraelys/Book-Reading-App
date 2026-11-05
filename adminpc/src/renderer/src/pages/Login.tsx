@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { AppError } from '../../../shared/errors'
 import { Icon } from '../components/Icon'
-import { WindowControls } from '../components/WindowControls'
 import { useAuth } from '../state/auth'
 
 export function Login() {
@@ -26,8 +25,6 @@ export function Login() {
 
   return (
     <div className="app-frame login-frame">
-      <div className="drag-strip drag-strip-tall" />
-      <div className="login-controls"><WindowControls /></div>
       <form className="login-card" onSubmit={(e) => void submit(e)}>
         <span className="login-mark" aria-hidden><Icon name="feather" size={22} /></span>
         <h1>Inkwell Admin</h1>

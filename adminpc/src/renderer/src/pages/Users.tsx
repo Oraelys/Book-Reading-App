@@ -112,6 +112,7 @@ export function Users() {
                     <td><UserSuspensionControl user={user} /></td>
                     <td>
                       <button
+                        type="button"
                         className="btn btn-small btn-outline"
                         aria-expanded={selectedUserId === user.id}
                         onClick={() => setSelectedUserId((current) => current === user.id ? null : user.id)}
@@ -263,6 +264,7 @@ function UserSuspensionControl({ user }: { user: AdminUser }) {
   return (
     <div className="user-role-control">
       <button
+        type="button"
         className={user.isSuspended ? 'btn btn-small btn-outline' : 'btn btn-small btn-danger'}
         disabled={mutation.isPending}
         onClick={submit}
@@ -305,6 +307,7 @@ function UserRoleControl({ user }: { user: AdminUser }) {
         <option value="admin">Administrator</option>
       </select>
       <button
+        type="button"
         className="btn btn-small btn-outline"
         disabled={role === user.role || mutation.isPending}
         onClick={() => {
