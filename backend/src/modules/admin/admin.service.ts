@@ -22,96 +22,6 @@ export interface AdminUser {
   suspended_at: string | null;
   suspension_reason: string | null;
 
-  async setUserSuspension(
-    actorUserId: string,
-    targetUserId: string,
-    isSuspended: boolean,
-    reason?: string,
-  ): Promise<{
-    userId: string;
-    isSuspended: boolean;
-    suspendedAt: string | null;
-    suspensionReason: string | null;
-    changedAt: string;
-  }> {
-    if (actorUserId === targetUserId) {
-      throw new BadRequestException('You cannot change your own account suspension.');
-    }
-
-    const supabase = this.database.getClient();
-    const { data: authResult, error: authLookupError } =
-      await supabase.auth.admin.getUserById(targetUserId);
-
-    if (authLookupError || !authResult?.user) {
-      this.logger.warn(
-        `Suspension auth lookup failed for ${targetUserId}: ${authLookupError?.message ?? 'user not found'}`,
-      );
-      throw new NotFoundException('The selected authentication account was not found.');
-    }
-
-    const previousBannedUntil = authResult.user.banned_until ?? null;
-    const { error: banError } = await supabase.auth.admin.updateUserById(
-      targetUserId,
-      { ban_duration: isSuspended ? '876000h' : 'none' },
-    );
-
-    if (banError) {
-      this.logger.error(`Unable to update auth suspension: ${banError.message}`);
-      throw new InternalServerErrorException('Unable to update the authentication account.');
-    }
-
-    const { data, error } = await supabase.rpc('admin_set_user_suspension', {
-      p_actor_user_id: actorUserId,
-      p_target_user_id: targetUserId,
-      p_is_suspended: isSuspended,
-      p_reason: isSuspended ? (reason?.trim().slice(0, 500) || null) : null,
-    });
-
-    if (error) {
-      // Restore the previous auth ban if the database transaction rejects the change.
-      const remainingSeconds = previousBannedUntil
-        ? Math.ceil((Date.parse(previousBannedUntil) - Date.now()) / 1000)
-        : 0;
-      const rollbackDuration = remainingSeconds > 0
-        ? `${remainingSeconds}s`
-        : 'none';
-      const { error: rollbackError } = await supabase.auth.admin.updateUserById(
-        targetUserId,
-        { ban_duration: rollbackDuration },
-      );
-
-      if (rollbackError) {
-        this.logger.error(
-          `Auth-ban rollback failed for ${targetUserId}: ${rollbackError.message}`,
-        );
-        throw new InternalServerErrorException(
-          'The suspension change failed and the authentication rollback needs administrator attention.',
-        );
-      }
-
-      this.logger.error(`Admin suspension change failed: ${error.message} (code: ${error.code ?? 'unknown'})`);
-      if (error.code === 'P0002') {
-        throw new NotFoundException('The selected user no longer exists.');
-      }
-      if (error.code === '42501' || error.code === '23514' || error.code === '22023') {
-        throw new BadRequestException(error.message);
-      }
-      throw new InternalServerErrorException('Unable to update the user suspension.');
-    }
-
-    const row = Array.isArray(data) ? data[0] : data;
-    if (!row || typeof row.user_id !== 'string') {
-      throw new InternalServerErrorException('The server returned an invalid suspension response.');
-    }
-
-    return {
-      userId: row.user_id,
-      isSuspended: row.is_suspended === true,
-      suspendedAt: row.suspended_at ?? null,
-      suspensionReason: row.suspension_reason ?? null,
-      changedAt: row.changed_at ?? new Date().toISOString(),
-    };
-  }
 
 }
 
@@ -363,4 +273,94 @@ export class AdminService {
     };
   }
 
+  async setUserSuspension(
+    actorUserId: string,
+    targetUserId: string,
+    isSuspended: boolean,
+    reason?: string,
+  ): Promise<{
+    userId: string;
+    isSuspended: boolean;
+    suspendedAt: string | null;
+    suspensionReason: string | null;
+    changedAt: string;
+  }> {
+    if (actorUserId === targetUserId) {
+      throw new BadRequestException('You cannot change your own account suspension.');
+    }
+
+    const supabase = this.database.getClient();
+    const { data: authResult, error: authLookupError } =
+      await supabase.auth.admin.getUserById(targetUserId);
+
+    if (authLookupError || !authResult?.user) {
+      this.logger.warn(
+        `Suspension auth lookup failed for ${targetUserId}: ${authLookupError?.message ?? 'user not found'}`,
+      );
+      throw new NotFoundException('The selected authentication account was not found.');
+    }
+
+    const previousBannedUntil = authResult.user.banned_until ?? null;
+    const { error: banError } = await supabase.auth.admin.updateUserById(
+      targetUserId,
+      { ban_duration: isSuspended ? '876000h' : 'none' },
+    );
+
+    if (banError) {
+      this.logger.error(`Unable to update auth suspension: ${banError.message}`);
+      throw new InternalServerErrorException('Unable to update the authentication account.');
+    }
+
+    const { data, error } = await supabase.rpc('admin_set_user_suspension', {
+      p_actor_user_id: actorUserId,
+      p_target_user_id: targetUserId,
+      p_is_suspended: isSuspended,
+      p_reason: isSuspended ? (reason?.trim().slice(0, 500) || null) : null,
+    });
+
+    if (error) {
+      // Restore the previous auth ban if the database transaction rejects the change.
+      const remainingSeconds = previousBannedUntil
+        ? Math.ceil((Date.parse(previousBannedUntil) - Date.now()) / 1000)
+        : 0;
+      const rollbackDuration = remainingSeconds > 0
+        ? `${remainingSeconds}s`
+        : 'none';
+      const { error: rollbackError } = await supabase.auth.admin.updateUserById(
+        targetUserId,
+        { ban_duration: rollbackDuration },
+      );
+
+      if (rollbackError) {
+        this.logger.error(
+          `Auth-ban rollback failed for ${targetUserId}: ${rollbackError.message}`,
+        );
+        throw new InternalServerErrorException(
+          'The suspension change failed and the authentication rollback needs administrator attention.',
+        );
+      }
+
+      this.logger.error(`Admin suspension change failed: ${error.message} (code: ${error.code ?? 'unknown'})`);
+      if (error.code === 'P0002') {
+        throw new NotFoundException('The selected user no longer exists.');
+      }
+      if (error.code === '42501' || error.code === '23514' || error.code === '22023') {
+        throw new BadRequestException(error.message);
+      }
+      throw new InternalServerErrorException('Unable to update the user suspension.');
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || typeof row.user_id !== 'string') {
+      throw new InternalServerErrorException('The server returned an invalid suspension response.');
+    }
+
+    return {
+      userId: row.user_id,
+      isSuspended: row.is_suspended === true,
+      suspendedAt: row.suspended_at ?? null,
+      suspensionReason: row.suspension_reason ?? null,
+      changedAt: row.changed_at ?? new Date().toISOString(),
+    };
+  }
 }
