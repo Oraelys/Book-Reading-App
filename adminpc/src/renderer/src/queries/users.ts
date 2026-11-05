@@ -1,6 +1,6 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AdminUserRole } from '../../../shared/admin-types';
+import type { AdminUserRole, AdminAccountStatus } from '../../../shared/admin-types';
 import { api } from '../lib/bridge';
 
 export const adminUsersKey = (
@@ -36,6 +36,22 @@ export function useChangeAdminUserRole() {
       api.admin.changeUserRole(userId, role),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'dashboard'] });
+    },
+  });
+}
+
+export function useSetAdminUserAccountStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, status, reason }: {
+      userId: string;
+      status: AdminAccountStatus;
+      reason?: string;
+    }) => api.admin.setUserAccountStatus(userId, status, reason),
+    onSuccess: async (_result, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'user-details', variables.userId] });
       await queryClient.invalidateQueries({ queryKey: ['admin', 'dashboard'] });
     },
   });
