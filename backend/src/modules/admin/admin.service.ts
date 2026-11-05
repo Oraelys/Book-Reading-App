@@ -18,6 +18,90 @@ export interface AdminUser {
   is_public: boolean | null;
   created_at: string | null;
   avatar_url: string | null;
+  account_status: 'active' | 'suspended';
+  suspended_at: string | null;
+  suspension_reason: string | null;
+  async setUserAccountStatus(
+    actorUserId: string,
+    targetUserId: string,
+    status: 'active' | 'suspended',
+    reason?: string,
+  ): Promise<{
+    userId: string;
+    previousStatus: 'active' | 'suspended';
+    newStatus: 'active' | 'suspended';
+    changedAt: string;
+  }> {
+    if (actorUserId === targetUserId) {
+      throw new BadRequestException('You cannot suspend or reactivate your own account.');
+    }
+
+    const client = this.database.getClient();
+    const banDuration = status === 'suspended' ? '876000h' : 'none';
+
+    // Supabase Auth ban prevents new sign-ins and token refresh. The profile
+    // status is also checked by authenticated API guards to reject existing JWTs.
+    const authResult = await client.auth.admin.updateUserById(targetUserId, {
+      ban_duration: banDuration,
+    });
+
+    if (authResult.error) {
+      this.logger.error(
+        `Supabase Auth account status update failed: ${authResult.error.message}`,
+      );
+      if (authResult.error.message.toLowerCase().includes('not found')) {
+        throw new NotFoundException('The selected authentication account was not found.');
+      }
+      throw new InternalServerErrorException('Unable to update sign-in access for this account.');
+    }
+
+    const { data, error } = await client.rpc('admin_set_profile_account_status', {
+      p_actor_user_id: actorUserId,
+      p_target_user_id: targetUserId,
+      p_new_status: status,
+      p_reason: reason?.trim().slice(0, 500) || null,
+    });
+
+    if (error) {
+      // Compensate Auth if the database transaction rejects the status change.
+      const rollback = await client.auth.admin.updateUserById(targetUserId, {
+        ban_duration: status === 'suspended' ? 'none' : '876000h',
+      });
+      if (rollback.error) {
+        this.logger.error(
+          `Account status rollback failed for ${targetUserId}: ${rollback.error.message}`,
+        );
+      }
+
+      this.logger.error(
+        `Admin account status change failed: ${error.message} (code: ${error.code ?? 'unknown'})`,
+      );
+      if (error.code === 'P0002') {
+        throw new NotFoundException('The selected user no longer exists.');
+      }
+      if (error.code === '42501' || error.code === '23514' || error.code === '22023') {
+        throw new BadRequestException(error.message);
+      }
+      throw new InternalServerErrorException(
+        rollback.error
+          ? 'The account status update failed and sign-in access may need administrator repair.'
+          : 'Unable to update the account status.',
+      );
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || typeof row.user_id !== 'string') {
+      throw new InternalServerErrorException('The server returned an invalid account status response.');
+    }
+
+    return {
+      userId: row.user_id,
+      previousStatus: row.previous_status,
+      newStatus: row.new_status,
+      changedAt: row.changed_at,
+    };
+  }
+
 }
 
 export interface AdminUsersResponse {
@@ -169,7 +253,7 @@ export class AdminService {
   let query = supabase
     .from('profiles')
     .select(
-      'id, username, user_tag, email, role, is_public, created_at, avatar_url',
+      'id, username, user_tag, email, role, is_public, created_at, avatar_url, account_status, suspended_at, suspension_reason',
       { count: 'exact' },
     )
     .order('created_at', { ascending: false })
@@ -211,6 +295,9 @@ export class AdminService {
       typeof row.is_public === 'boolean' ? row.is_public : null,
     created_at: row.created_at ?? null,
     avatar_url: row.avatar_url ?? null,
+    account_status: row.account_status === 'suspended' ? 'suspended' : 'active',
+    suspended_at: row.suspended_at ?? null,
+    suspension_reason: row.suspension_reason ?? null,
   }));
 
   return {
