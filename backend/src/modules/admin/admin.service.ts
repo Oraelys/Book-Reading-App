@@ -21,7 +21,7 @@ export interface AdminUser {
   account_status: 'active' | 'suspended';
   suspended_at: string | null;
   suspension_reason: string | null;
-
+}
 
 export interface AdminUsersResponse {
   users: AdminUser[];
