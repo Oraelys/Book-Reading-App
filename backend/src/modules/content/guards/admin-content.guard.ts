@@ -70,7 +70,7 @@ export class AdminContentGuard implements CanActivate {
       await this.database
         .getClient()
         .from('profiles')
-        .select('id, role')
+        .select('id, role, is_suspended')
         .eq('id', user.id)
         .maybeSingle();
 
@@ -84,6 +84,10 @@ export class AdminContentGuard implements CanActivate {
       throw new ForbiddenException(
         'A profile is required to access administrator features.',
       );
+    }
+
+    if (profile.is_suspended === true) {
+      throw new ForbiddenException('This account has been suspended.');
     }
 
     if (profile.role !== 'admin') {
