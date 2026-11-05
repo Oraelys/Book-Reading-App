@@ -6,6 +6,8 @@ import type {
   AdminUsersResponse,
   AdminRoleChangeResponse,
   AdminUserDetailsResponse,
+  AdminAccountStatus,
+  AdminAccountStatusChangeResponse,
 } from '../../../shared/admin-types';
 
 async function unwrap<T>(pending: Promise<Result<T>>): Promise<T> {
@@ -31,6 +33,9 @@ admin: {
 
   getUserDetails: (userId: string): Promise<AdminUserDetailsResponse> =>
     unwrap(window.inkwell.admin.getUserDetails(userId)),
+
+  setUserAccountStatus: (userId: string, status: AdminAccountStatus, reason?: string): Promise<AdminAccountStatusChangeResponse> =>
+    unwrap(window.inkwell.admin.setUserAccountStatus(userId, status, reason)),
 },
   appInfo: () => unwrap(window.inkwell.app.info()),
   health: () => unwrap(window.inkwell.system.health()),

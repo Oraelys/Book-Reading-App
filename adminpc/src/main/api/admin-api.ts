@@ -8,6 +8,9 @@ import type {
   AdminRoleChangeResponse,
   AdminUserDetailsResponse,
   AdminUserRoleAuditItem,
+  AdminAccountStatus,
+  AdminAccountStatusAuditItem,
+  AdminAccountStatusChangeResponse,
 } from '../../shared/admin-types';
 import type { ApiClient } from './api-client';
 
@@ -155,6 +158,9 @@ export class AdminApi {
           : null,
       createdAt: textOrNull(value.created_at),
       avatarUrl: textOrNull(value.avatar_url),
+      accountStatus: value.account_status === 'suspended' ? 'suspended' : 'active',
+      suspendedAt: textOrNull(value.suspended_at),
+      suspensionReason: textOrNull(value.suspension_reason),
     };
   });
 
@@ -177,6 +183,7 @@ export class AdminApi {
       typeof raw.user.id !== 'string' ||
       !Array.isArray(raw.activity) ||
       !Array.isArray(raw.roleChanges) ||
+      !Array.isArray(raw.statusChanges) ||
       typeof raw.activityLimit !== 'number'
     ) {
       throw new AppError({
@@ -203,6 +210,10 @@ export class AdminApi {
         avatarUrl: textOrNull(raw.user.avatarUrl),
         createdAt: textOrNull(raw.user.createdAt),
         updatedAt: textOrNull(raw.user.updatedAt),
+        accountStatus: raw.user.accountStatus === 'suspended' ? 'suspended' : 'active',
+        suspendedAt: textOrNull(raw.user.suspendedAt),
+        suspendedBy: textOrNull(raw.user.suspendedBy),
+        suspensionReason: textOrNull(raw.user.suspensionReason),
       },
       activity: raw.activity.map((value) => {
         if (!isRaw(value) || typeof value.id !== 'string') {
@@ -232,7 +243,56 @@ export class AdminApi {
           createdAt: textOrNull(value.createdAt),
         };
       }),
+      statusChanges: raw.statusChanges.map((value): AdminAccountStatusAuditItem => {
+        if (!isRaw(value) || typeof value.id !== 'string' || typeof value.actorUserId !== 'string') {
+          throw new AppError({ kind: 'unknown', message: 'The server returned invalid account status audit data.' });
+        }
+        if ((value.previousStatus !== 'active' && value.previousStatus !== 'suspended') || (value.newStatus !== 'active' && value.newStatus !== 'suspended')) {
+          throw new AppError({ kind: 'unknown', message: 'The server returned invalid account status audit data.' });
+        }
+        return {
+          id: value.id,
+          actorUserId: value.actorUserId,
+          previousStatus: value.previousStatus as AdminAccountStatus,
+          newStatus: value.newStatus as AdminAccountStatus,
+          reason: textOrNull(value.reason),
+          createdAt: textOrNull(value.createdAt),
+        };
+      }),
       activityLimit: count(raw.activityLimit),
+    };
+  }
+
+
+  async setUserAccountStatus(
+    userId: string,
+    status: AdminAccountStatus,
+    reason?: string,
+  ): Promise<AdminAccountStatusChangeResponse> {
+    const raw = await this.api.request({
+      method: 'POST',
+      path: '/admin/users/status',
+      body: { userId, status, reason },
+    });
+
+    if (
+      !isRaw(raw) ||
+      typeof raw.userId !== 'string' ||
+      typeof raw.changedAt !== 'string' ||
+      (raw.previousStatus !== 'active' && raw.previousStatus !== 'suspended') ||
+      (raw.newStatus !== 'active' && raw.newStatus !== 'suspended')
+    ) {
+      throw new AppError({
+        kind: 'unknown',
+        message: 'The server returned an invalid account status response.',
+      });
+    }
+
+    return {
+      userId: raw.userId,
+      previousStatus: raw.previousStatus,
+      newStatus: raw.newStatus,
+      changedAt: raw.changedAt,
     };
   }
 

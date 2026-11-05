@@ -26,6 +26,7 @@ export const IPC = {
   adminUsersList: 'admin:users-list',
   adminUserRoleChange: 'admin:user-role-change',
   adminUserDetails: 'admin:user-details',
+  adminUserStatusChange: 'admin:user-status-change',
   adminDashboardOverview: 'admin:dashboard-overview',
   appInfo: 'app:info',
   authGetState: 'auth:get-state',
@@ -65,6 +66,7 @@ admin: {
   ): Promise<Result<AdminUsersResponse>>;
   changeUserRole(userId: string, role: AdminUserRole): Promise<Result<AdminRoleChangeResponse>>;
   getUserDetails(userId: string): Promise<Result<AdminUserDetailsResponse>>;
+  setUserAccountStatus(userId: string, status: AdminAccountStatus, reason?: string): Promise<Result<AdminAccountStatusChangeResponse>>;
 };
   app: { info(): Promise<Result<AppInfo>> }
   system: { health(): Promise<Result<HealthStatus>> }

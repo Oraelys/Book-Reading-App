@@ -41,4 +41,26 @@ export class AdminUsersController {
 
     return this.adminService.changeUserRole(request.user.id, body.userId, body.role);
   }
+  @Post('status')
+  setAccountStatus(
+    @Req() request: Request & { user: { id: string } },
+    @Body() body: { userId?: string; status?: string; reason?: string },
+  ) {
+    if (
+      typeof body?.userId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.userId) ||
+      (body?.status !== 'active' && body?.status !== 'suspended') ||
+      (body.reason !== undefined && typeof body.reason !== 'string')
+    ) {
+      throw new BadRequestException('A valid user ID and account status are required.');
+    }
+
+    return this.adminService.setUserAccountStatus(
+      request.user.id,
+      body.userId,
+      body.status,
+      body.reason,
+    );
+  }
+
 }

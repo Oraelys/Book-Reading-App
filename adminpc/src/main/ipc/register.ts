@@ -18,6 +18,8 @@ import type {
   AdminUsersResponse,
   AdminRoleChangeResponse,
   AdminUserDetailsResponse,
+  AdminAccountStatus,
+  AdminAccountStatusChangeResponse,
 } from '../../shared/admin-types';
 
 export interface Services {
@@ -55,6 +57,7 @@ const importArgs = z.tuple([
 ])
 const userRoleChangeArgs = z.tuple([id, z.enum(['reader', 'author', 'admin'])]);
 const userDetailsArgs = z.tuple([id]);
+const userStatusArgs = z.tuple([id, z.enum(['active', 'suspended']), z.string().trim().max(500).optional()]);
 const userRoleArgs = z.tuple([
   z.string().trim().max(100),
   z.enum(['all', 'reader', 'author', 'admin']),
@@ -107,6 +110,12 @@ handle(
   userDetailsArgs,
   (_event, userId): Promise<AdminUserDetailsResponse> =>
     admin.getUserDetails(userId),
+);
+handle(
+  IPC.adminUserStatusChange,
+  userStatusArgs,
+  (_event, userId, status, reason): Promise<AdminAccountStatusChangeResponse> =>
+    admin.setUserAccountStatus(userId, status as AdminAccountStatus, reason),
 );
 handle(
   IPC.adminUserRoleChange,

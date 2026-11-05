@@ -5,6 +5,7 @@ import type {
   AdminDashboardOverview,
   AdminUserRole,
   AdminUserDetailsResponse,
+  AdminAccountStatus,
 } from '../shared/admin-types';
 /**
  * The only thing the renderer can reach. `ipcRenderer` itself is never exposed, and there is no
@@ -27,6 +28,8 @@ const bridge: InkwellBridge = {
     ipcRenderer.invoke(IPC.adminUserRoleChange, userId, role),
   getUserDetails: (userId: string) =>
     ipcRenderer.invoke(IPC.adminUserDetails, userId),
+  setUserAccountStatus: (userId: string, status: AdminAccountStatus, reason?: string) =>
+    ipcRenderer.invoke(IPC.adminUserStatusChange, userId, status, reason),
 },
   app: { info: () => ipcRenderer.invoke(IPC.appInfo) },
   system: { health: () => ipcRenderer.invoke(IPC.systemHealth) },

@@ -3,6 +3,7 @@ import {
   ExecutionContext,
   Injectable,
   UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 
 import { SupabaseService } from '../../database/supabase.service';
@@ -58,6 +59,20 @@ export class WritingAuthGuard
       throw new UnauthorizedException(
         'Invalid or expired authentication token.',
       );
+    }
+
+    const { data: profile, error: profileError } = await this.database
+      .getClient()
+      .from('profiles')
+      .select('account_status')
+      .eq('id', data.user.id)
+      .maybeSingle();
+
+    if (profileError || !profile) {
+      throw new UnauthorizedException('Unable to verify the account profile.');
+    }
+    if (profile.account_status === 'suspended') {
+      throw new ForbiddenException('This account is suspended.');
     }
 
     request.user = data.user;
