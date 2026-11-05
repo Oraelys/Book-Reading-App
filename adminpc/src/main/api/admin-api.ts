@@ -8,6 +8,8 @@ import type {
   AdminRoleChangeResponse,
   AdminUserDetailsResponse,
   AdminUserRoleAuditItem,
+  AdminUserSuspensionResponse,
+  AdminUserSuspensionAuditItem,
 } from '../../shared/admin-types';
 import type { ApiClient } from './api-client';
 
@@ -155,6 +157,9 @@ export class AdminApi {
           : null,
       createdAt: textOrNull(value.created_at),
       avatarUrl: textOrNull(value.avatar_url),
+      isSuspended: value.is_suspended === true,
+      suspendedAt: textOrNull(value.suspended_at),
+      suspensionReason: textOrNull(value.suspension_reason),
     };
   });
 
@@ -177,6 +182,7 @@ export class AdminApi {
       typeof raw.user.id !== 'string' ||
       !Array.isArray(raw.activity) ||
       !Array.isArray(raw.roleChanges) ||
+      !Array.isArray(raw.suspensionChanges) ||
       typeof raw.activityLimit !== 'number'
     ) {
       throw new AppError({
@@ -201,6 +207,10 @@ export class AdminApi {
         isPublic: typeof raw.user.isPublic === 'boolean' ? raw.user.isPublic : null,
         bio: textOrNull(raw.user.bio),
         avatarUrl: textOrNull(raw.user.avatarUrl),
+        isSuspended: raw.user.isSuspended === true,
+        suspendedAt: textOrNull(raw.user.suspendedAt),
+        suspendedBy: textOrNull(raw.user.suspendedBy),
+        suspensionReason: textOrNull(raw.user.suspensionReason),
         createdAt: textOrNull(raw.user.createdAt),
         updatedAt: textOrNull(raw.user.updatedAt),
       },
@@ -232,7 +242,38 @@ export class AdminApi {
           createdAt: textOrNull(value.createdAt),
         };
       }),
+      suspensionChanges: raw.suspensionChanges.map((value): AdminUserSuspensionAuditItem => {
+        if (!isRaw(value) || typeof value.id !== 'string' || typeof value.actorUserId !== 'string' || (value.action !== 'suspended' && value.action !== 'reactivated')) {
+          throw new AppError({ kind: 'unknown', message: 'The server returned invalid suspension audit data.' });
+        }
+        return { id: value.id, actorUserId: value.actorUserId, action: value.action, reason: textOrNull(value.reason), createdAt: textOrNull(value.createdAt) };
+      }),
       activityLimit: count(raw.activityLimit),
+    };
+  }
+
+
+  async setUserSuspension(
+    userId: string,
+    isSuspended: boolean,
+    reason?: string,
+  ): Promise<AdminUserSuspensionResponse> {
+    const raw = await this.api.request({
+      method: 'POST',
+      path: '/admin/users/suspension',
+      body: { userId, isSuspended, ...(reason?.trim() ? { reason: reason.trim() } : {}) },
+    });
+
+    if (!isRaw(raw) || typeof raw.userId !== 'string' || typeof raw.isSuspended !== 'boolean' || typeof raw.changedAt !== 'string') {
+      throw new AppError({ kind: 'unknown', message: 'The server returned an invalid suspension response.' });
+    }
+
+    return {
+      userId: raw.userId,
+      isSuspended: raw.isSuspended,
+      suspendedAt: textOrNull(raw.suspendedAt),
+      suspensionReason: textOrNull(raw.suspensionReason),
+      changedAt: raw.changedAt,
     };
   }
 
