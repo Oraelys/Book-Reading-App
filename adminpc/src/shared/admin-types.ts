@@ -21,6 +21,7 @@ export interface AdminDashboardOverview {
 
 
 export type AdminUserRole = 'reader' | 'author' | 'admin';
+export type AdminAccountStatus = 'active' | 'suspended';
 
 export interface AdminUser {
   id: string;
@@ -31,6 +32,9 @@ export interface AdminUser {
   isPublic: boolean | null;
   createdAt: string | null;
   avatarUrl: string | null;
+  accountStatus: AdminAccountStatus;
+  suspendedAt: string | null;
+  suspensionReason: string | null;
 }
 
 export interface AdminUsersResponse {
@@ -68,8 +72,29 @@ export interface AdminUserDetailsResponse {
   user: AdminUser & {
     bio: string | null;
     updatedAt: string | null;
+    accountStatus: AdminAccountStatus;
+    suspendedAt: string | null;
+    suspendedBy: string | null;
+    suspensionReason: string | null;
   };
   activity: AdminUserActivityItem[];
   roleChanges: AdminUserRoleAuditItem[];
+  statusChanges: AdminAccountStatusAuditItem[];
   activityLimit: number;
+}
+
+export interface AdminAccountStatusAuditItem {
+  id: string;
+  actorUserId: string;
+  previousStatus: AdminAccountStatus;
+  newStatus: AdminAccountStatus;
+  reason: string | null;
+  createdAt: string | null;
+}
+
+export interface AdminAccountStatusChangeResponse {
+  userId: string;
+  previousStatus: AdminAccountStatus;
+  newStatus: AdminAccountStatus;
+  changedAt: string;
 }
