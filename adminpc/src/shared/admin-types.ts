@@ -71,6 +71,7 @@ export interface AdminUserDetailsResponse {
   user: AdminUser & {
     bio: string | null;
     updatedAt: string | null;
+    suspendedBy: string | null;
   };
   activity: AdminUserActivityItem[];
   roleChanges: AdminUserRoleAuditItem[];
