@@ -162,7 +162,7 @@ function UserDetailsPanel({ onClose, query }: {
         <div className="stat-col"><div className="stat"><div className="stat-title">Last profile update</div><div className="stat-value small">{formatDay(user.updatedAt)}</div></div></div>
       </div>
       {user.isSuspended && (
-        <div className="notice notice-warning" role="status">
+        <div className="card" role="status">
           <strong>This account is suspended.</strong>
           {user.suspensionReason && <p>{user.suspensionReason}</p>}
           {user.suspendedAt && <p className="muted small">Suspended {formatDay(user.suspendedAt)}</p>}
@@ -238,7 +238,6 @@ function UserDetailsPanel({ onClose, query }: {
 
 
 function UserSuspensionControl({ user }: { user: AdminUser }) {
-  const [reason, setReason] = useState('');
   const mutation = useSetAdminUserSuspension();
 
   const suspend = !user.isSuspended;
