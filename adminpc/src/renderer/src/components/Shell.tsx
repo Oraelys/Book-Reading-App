@@ -5,7 +5,6 @@ import { useBooks } from '../queries/books'
 import { useAuth } from '../state/auth'
 import { Icon, type IconName } from './Icon'
 import { LibraryTree } from './LibraryTree'
-import { WindowControls } from './WindowControls'
 
 /** Rail = every top-level module. Items after the divider have no backend endpoint yet (BACKEND GAP). */
 const RAIL: { to: string; label: string; icon: IconName; end?: boolean; gap?: boolean }[] = [
@@ -65,8 +64,6 @@ export function Shell() {
 
   return (
     <div className="app-frame">
-      <div className="drag-strip" />
-
       <aside className="rail" aria-label="Modules">
         <div className="rail-capsule rail-main">
           <nav className="rail-pill">
@@ -95,8 +92,7 @@ export function Shell() {
       <div className={`panel${collapsed ? ' collapsed' : ''}`}>
         {!collapsed && (
           <aside className="sidebar">
-            <div className="sidebar-top drag">
-              <WindowControls />
+            <div className="sidebar-top">
               <button className="icon-btn no-drag" onClick={toggle} aria-label="Hide sidebar" title="Hide sidebar">
                 <Icon name="panel" size={16} />
               </button>
@@ -149,8 +145,7 @@ export function Shell() {
 
         <main className="main">
           {collapsed && (
-            <div className="floating-top drag">
-              <WindowControls />
+            <div className="floating-top">
               <button className="icon-btn no-drag" onClick={toggle} aria-label="Show sidebar" title="Show sidebar">
                 <Icon name="panel" size={16} />
               </button>
