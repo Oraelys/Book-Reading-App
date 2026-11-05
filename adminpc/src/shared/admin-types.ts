@@ -74,6 +74,7 @@ export interface AdminUserDetailsResponse {
   };
   activity: AdminUserActivityItem[];
   roleChanges: AdminUserRoleAuditItem[];
+  suspensionChanges: AdminUserSuspensionAuditItem[];
   activityLimit: number;
 }
 
@@ -84,4 +85,13 @@ export interface AdminUserSuspensionResponse {
   suspendedAt: string | null;
   suspensionReason: string | null;
   changedAt: string;
+}
+
+
+export interface AdminUserSuspensionAuditItem {
+  id: string;
+  actorUserId: string;
+  action: 'suspended' | 'reactivated';
+  reason: string | null;
+  createdAt: string | null;
 }
