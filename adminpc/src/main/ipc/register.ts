@@ -18,6 +18,7 @@ import type {
   AdminUsersResponse,
   AdminRoleChangeResponse,
   AdminUserDetailsResponse,
+  AdminUserSuspensionResponse,
 } from '../../shared/admin-types';
 
 export interface Services {
@@ -55,6 +56,7 @@ const importArgs = z.tuple([
 ])
 const userRoleChangeArgs = z.tuple([id, z.enum(['reader', 'author', 'admin'])]);
 const userDetailsArgs = z.tuple([id]);
+const userSuspensionArgs = z.tuple([id, z.boolean(), z.string().trim().max(500).optional()]);
 const userRoleArgs = z.tuple([
   z.string().trim().max(100),
   z.enum(['all', 'reader', 'author', 'admin']),
@@ -101,6 +103,12 @@ export function registerIpc({ config, auth, content, imports, picker, system, ad
   IPC.adminDashboardOverview,
   noArgs,
   (): Promise<AdminDashboardOverview> => admin.dashboardOverview(),
+);
+handle(
+  IPC.adminUserSuspension,
+  userSuspensionArgs,
+  (_event, userId, isSuspended, reason): Promise<AdminUserSuspensionResponse> =>
+    admin.setUserSuspension(userId, isSuspended, reason),
 );
 handle(
   IPC.adminUserDetails,
