@@ -40,3 +40,26 @@ export function useChangeAdminUserRole() {
     },
   });
 }
+
+
+export function useSetAdminUserSuspension() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      userId,
+      isSuspended,
+      reason,
+    }: {
+      userId: string;
+      isSuspended: boolean;
+      reason?: string;
+    }) => api.admin.setUserSuspension(userId, isSuspended, reason),
+    onSuccess: async (_result, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      await queryClient.invalidateQueries({
+        queryKey: ['admin', 'user-details', variables.userId],
+      });
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'dashboard'] });
+    },
+  });
+}

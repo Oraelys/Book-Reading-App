@@ -23,16 +23,22 @@ export class AdminUserDetailsController {
     }
 
     const supabase = this.database.getClient();
-    const [profileResult, activityResult, roleAuditResult] = await Promise.all([
+    const [profileResult, activityResult, suspensionAuditResult, roleAuditResult] = await Promise.all([
       supabase
         .from('profiles')
-        .select('id, username, user_tag, email, role, is_public, bio, avatar_url, created_at, updated_at')
+        .select('id, username, user_tag, email, role, is_public, bio, avatar_url, created_at, updated_at, is_suspended, suspended_at, suspended_by, suspension_reason')
         .eq('id', userId)
         .maybeSingle(),
       supabase
         .from('user_activity_logs')
         .select('id, activity_type, novel_id, chapter_id, metadata, created_at')
         .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      supabase
+        .from('admin_user_suspension_audit_logs')
+        .select('id, actor_user_id, action, reason, created_at')
+        .eq('target_user_id', userId)
         .order('created_at', { ascending: false })
         .limit(50),
       supabase
@@ -49,7 +55,7 @@ export class AdminUserDetailsController {
     if (!profileResult.data) {
       throw new NotFoundException('User not found.');
     }
-    if (activityResult.error || roleAuditResult.error) {
+    if (activityResult.error || suspensionAuditResult.error || roleAuditResult.error) {
       throw new Error('Unable to retrieve user history.');
     }
 
@@ -66,6 +72,10 @@ export class AdminUserDetailsController {
         avatarUrl: profile.avatar_url ?? null,
         createdAt: profile.created_at ?? null,
         updatedAt: profile.updated_at ?? null,
+        isSuspended: profile.is_suspended === true,
+        suspendedAt: profile.suspended_at ?? null,
+        suspendedBy: profile.suspended_by ?? null,
+        suspensionReason: profile.suspension_reason ?? null,
       },
       activity: (activityResult.data ?? []).map((item) => ({
         id: item.id,
@@ -74,6 +84,13 @@ export class AdminUserDetailsController {
         chapterId: item.chapter_id ?? null,
         metadata: item.metadata ?? null,
         createdAt: item.created_at ?? null,
+      })),
+      suspensionChanges: (suspensionAuditResult.data ?? []).map((item) => ({
+        id: String(item.id),
+        actorUserId: item.actor_user_id,
+        action: item.action,
+        reason: item.reason ?? null,
+        createdAt: item.created_at,
       })),
       roleChanges: (roleAuditResult.data ?? []).map((item) => ({
         id: String(item.id),

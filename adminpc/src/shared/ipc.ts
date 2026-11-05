@@ -4,6 +4,7 @@ import type { AdminDashboardOverview,
   AdminUsersResponse,
   AdminRoleChangeResponse,
   AdminUserDetailsResponse,
+  AdminUserSuspensionResponse,
  } from './admin-types';
 import type {
   AppInfo,
@@ -26,6 +27,7 @@ export const IPC = {
   adminUsersList: 'admin:users-list',
   adminUserRoleChange: 'admin:user-role-change',
   adminUserDetails: 'admin:user-details',
+  adminUserSuspension: 'admin:user-suspension',
   adminDashboardOverview: 'admin:dashboard-overview',
   appInfo: 'app:info',
   authGetState: 'auth:get-state',
@@ -65,6 +67,7 @@ admin: {
   ): Promise<Result<AdminUsersResponse>>;
   changeUserRole(userId: string, role: AdminUserRole): Promise<Result<AdminRoleChangeResponse>>;
   getUserDetails(userId: string): Promise<Result<AdminUserDetailsResponse>>;
+  setUserSuspension(userId: string, isSuspended: boolean, reason?: string): Promise<Result<AdminUserSuspensionResponse>>;
 };
   app: { info(): Promise<Result<AppInfo>> }
   system: { health(): Promise<Result<HealthStatus>> }

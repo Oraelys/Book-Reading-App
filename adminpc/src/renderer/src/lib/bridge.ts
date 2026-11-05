@@ -6,6 +6,7 @@ import type {
   AdminUsersResponse,
   AdminRoleChangeResponse,
   AdminUserDetailsResponse,
+  AdminUserSuspensionResponse,
 } from '../../../shared/admin-types';
 
 async function unwrap<T>(pending: Promise<Result<T>>): Promise<T> {
@@ -31,6 +32,9 @@ admin: {
 
   getUserDetails: (userId: string): Promise<AdminUserDetailsResponse> =>
     unwrap(window.inkwell.admin.getUserDetails(userId)),
+
+  setUserSuspension: (userId: string, isSuspended: boolean, reason?: string): Promise<AdminUserSuspensionResponse> =>
+    unwrap(window.inkwell.admin.setUserSuspension(userId, isSuspended, reason)),
 },
   appInfo: () => unwrap(window.inkwell.app.info()),
   health: () => unwrap(window.inkwell.system.health()),
