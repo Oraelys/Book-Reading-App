@@ -23,10 +23,10 @@ export class AdminUserDetailsController {
     }
 
     const supabase = this.database.getClient();
-    const [profileResult, activityResult, roleAuditResult] = await Promise.all([
+    const [profileResult, activityResult, roleAuditResult, statusAuditResult] = await Promise.all([
       supabase
         .from('profiles')
-        .select('id, username, user_tag, email, role, is_public, bio, avatar_url, created_at, updated_at')
+        .select('id, username, user_tag, email, role, is_public, bio, avatar_url, created_at, updated_at, account_status, suspended_at, suspended_by, suspension_reason')
         .eq('id', userId)
         .maybeSingle(),
       supabase
@@ -41,6 +41,12 @@ export class AdminUserDetailsController {
         .eq('target_user_id', userId)
         .order('created_at', { ascending: false })
         .limit(50),
+      supabase
+        .from('admin_account_status_audit_logs')
+        .select('id, actor_user_id, previous_status, new_status, reason, created_at')
+        .eq('target_user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(50),
     ]);
 
     if (profileResult.error) {
@@ -49,7 +55,7 @@ export class AdminUserDetailsController {
     if (!profileResult.data) {
       throw new NotFoundException('User not found.');
     }
-    if (activityResult.error || roleAuditResult.error) {
+    if (activityResult.error || roleAuditResult.error || statusAuditResult.error) {
       throw new Error('Unable to retrieve user history.');
     }
 
@@ -66,6 +72,10 @@ export class AdminUserDetailsController {
         avatarUrl: profile.avatar_url ?? null,
         createdAt: profile.created_at ?? null,
         updatedAt: profile.updated_at ?? null,
+        accountStatus: profile.account_status ?? 'active',
+        suspendedAt: profile.suspended_at ?? null,
+        suspendedBy: profile.suspended_by ?? null,
+        suspensionReason: profile.suspension_reason ?? null,
       },
       activity: (activityResult.data ?? []).map((item) => ({
         id: item.id,
@@ -80,6 +90,14 @@ export class AdminUserDetailsController {
         actorUserId: item.actor_user_id,
         previousRole: item.previous_role,
         newRole: item.new_role,
+        createdAt: item.created_at,
+      })),
+      statusChanges: (statusAuditResult.data ?? []).map((item) => ({
+        id: String(item.id),
+        actorUserId: item.actor_user_id,
+        previousStatus: item.previous_status,
+        newStatus: item.new_status,
+        reason: item.reason ?? null,
         createdAt: item.created_at,
       })),
       activityLimit: 50,
