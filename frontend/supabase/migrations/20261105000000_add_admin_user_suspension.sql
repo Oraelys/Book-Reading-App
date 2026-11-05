@@ -43,7 +43,6 @@ AS $$
 DECLARE
   v_current_suspended boolean;
   v_target_role text;
-  v_active_admin_count bigint;
   v_changed_at timestamptz := now();
   v_reason text := NULLIF(left(trim(COALESCE(p_reason, '')), 500), '');
 BEGIN
@@ -51,7 +50,7 @@ BEGIN
     RAISE EXCEPTION 'Actor, target and suspension status are required' USING ERRCODE = '22023';
   END IF;
 
-  PERFORM pg_advisory_xact_lock(hashtext('inkverse-user-suspension-change'));
+  PERFORM pg_advisory_xact_lock(hashtext('inkverse-profile-role-change'));
 
   IF NOT EXISTS (
     SELECT 1 FROM public.profiles p
@@ -74,14 +73,10 @@ BEGIN
     RAISE EXCEPTION 'Target profile was not found' USING ERRCODE = 'P0002';
   END IF;
 
-  IF p_is_suspended AND v_target_role = 'admin' AND NOT v_current_suspended THEN
-    SELECT count(*) INTO v_active_admin_count
-    FROM public.profiles p
-    WHERE p.role = 'admin' AND p.is_suspended = false;
-
-    IF v_active_admin_count <= 1 THEN
-      RAISE EXCEPTION 'The last active administrator cannot be suspended' USING ERRCODE = '23514';
-    END IF;
+  -- Keep administrator access changes separate from ordinary account moderation.
+  -- An administrator must first be demoted through the audited role-change flow.
+  IF p_is_suspended AND v_target_role = 'admin' THEN
+    RAISE EXCEPTION 'Demote this administrator before suspending the account' USING ERRCODE = '23514';
   END IF;
 
   IF v_current_suspended = p_is_suspended THEN
