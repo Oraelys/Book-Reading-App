@@ -52,7 +52,7 @@ BEGIN
     RAISE EXCEPTION 'Invalid account status' USING ERRCODE = '22023';
   END IF;
 
-  PERFORM pg_advisory_xact_lock(hashtext('inkverse-account-status-change'));
+  PERFORM pg_advisory_xact_lock(hashtext('inkverse-profile-role-change'));
 
   IF NOT EXISTS (
     SELECT 1 FROM public.profiles p
