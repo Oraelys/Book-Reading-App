@@ -6,6 +6,7 @@ import {
   useAdminUsers,
   useAdminUserDetails,
   useChangeAdminUserRole,
+  useSetAdminUserSuspension,
 } from '../queries/users';
 
 type RoleFilter = AdminUserRole | 'all';
@@ -88,8 +89,10 @@ export function Users() {
                   <th>Email</th>
                   <th>Role</th>
                   <th>Profile visibility</th>
+                  <th>Account status</th>
                   <th>Registered</th>
                   <th>Manage role</th>
+                  <th>Account access</th>
                   <th>Details</th>
                 </tr>
               </thead>
@@ -103,8 +106,10 @@ export function Users() {
                     <td className="wrap">{user.email || '—'}</td>
                     <td><span className={`badge ${roleBadge(user.role)}`}>{roleLabel(user.role)}</span></td>
                     <td>{user.isPublic === null ? 'Unknown' : user.isPublic ? 'Public' : 'Private'}</td>
+                    <td><span className={user.isSuspended ? 'badge badge-draft' : 'badge badge-published'}>{user.isSuspended ? 'Suspended' : 'Active'}</span></td>
                     <td>{formatDay(user.createdAt)}</td>
                     <td><UserRoleControl user={user} /></td>
+                    <td><UserSuspensionControl user={user} /></td>
                     <td>
                       <button
                         className="btn btn-small btn-outline"
@@ -152,9 +157,17 @@ function UserDetailsPanel({ onClose, query }: {
       <div className="stats">
         <div className="stat-col"><div className="stat"><div className="stat-title">Email</div><div className="stat-value small">{user.email || '—'}</div></div></div>
         <div className="stat-col"><div className="stat"><div className="stat-title">Role</div><div className="stat-value small">{roleLabel(user.role)}</div></div></div>
+        <div className="stat-col"><div className="stat"><div className="stat-title">Account status</div><div className="stat-value small">{user.isSuspended ? 'Suspended' : 'Active'}</div></div></div>
         <div className="stat-col"><div className="stat"><div className="stat-title">Visibility</div><div className="stat-value small">{user.isPublic === null ? 'Unknown' : user.isPublic ? 'Public' : 'Private'}</div></div></div>
         <div className="stat-col"><div className="stat"><div className="stat-title">Last profile update</div><div className="stat-value small">{formatDay(user.updatedAt)}</div></div></div>
       </div>
+      {user.isSuspended && (
+        <div className="notice notice-warning" role="status">
+          <strong>This account is suspended.</strong>
+          {user.suspensionReason && <p>{user.suspensionReason}</p>}
+          {user.suspendedAt && <p className="muted small">Suspended {formatDay(user.suspendedAt)}</p>}
+        </div>
+      )}
       {user.bio && <p>{user.bio}</p>}
       <h3>Recent activity</h3>
       <p className="muted small">Latest {activityLimit} recorded events for this account.</p>
@@ -171,6 +184,27 @@ function UserDetailsPanel({ onClose, query }: {
                   <td className="muted small">{item.novelId || '—'}</td>
                   <td className="muted small">{item.chapterId || '—'}</td>
                   <td>{formatDay(item.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <h3>Account suspension history</h3>
+      {query.data.suspensionChanges.length === 0 ? (
+        <EmptyState title="No suspension changes recorded" />
+      ) : (
+        <div className="table-wrap">
+          <table className="table">
+            <thead><tr><th>Action</th><th>Reason</th><th>Changed by (admin ID)</th><th>When</th></tr></thead>
+            <tbody>
+              {query.data.suspensionChanges.map((change) => (
+                <tr key={change.id}>
+                  <td>{change.action === 'suspended' ? 'Suspended' : 'Reactivated'}</td>
+                  <td>{change.reason || '—'}</td>
+                  <td className="muted small">{change.actorUserId}</td>
+                  <td>{formatDay(change.createdAt)}</td>
                 </tr>
               ))}
             </tbody>
@@ -199,6 +233,46 @@ function UserDetailsPanel({ onClose, query }: {
         </div>
       )}
     </section>
+  );
+}
+
+
+function UserSuspensionControl({ user }: { user: AdminUser }) {
+  const [reason, setReason] = useState('');
+  const mutation = useSetAdminUserSuspension();
+
+  const suspend = !user.isSuspended;
+  const submit = () => {
+    if (suspend) {
+      const value = window.prompt(
+        'Why are you suspending ' + (user.username || 'this account') + '? (Optional, max 500 characters)',
+        '',
+      );
+      if (value === null) return;
+      if (value.length > 500) {
+        window.alert('The suspension reason must be 500 characters or fewer.');
+        return;
+      }
+      if (!window.confirm('Suspend this account? The user will be blocked from signing in and using protected features.')) return;
+      mutation.mutate({ userId: user.id, isSuspended: true, reason: value.trim() || undefined });
+    } else {
+      if (!window.confirm('Reactivate this account and restore its ability to sign in?')) return;
+      mutation.mutate({ userId: user.id, isSuspended: false });
+    }
+  };
+
+  return (
+    <div className="user-role-control">
+      <button
+        className={user.isSuspended ? 'btn btn-small btn-outline' : 'btn btn-small btn-danger'}
+        disabled={mutation.isPending}
+        onClick={submit}
+      >
+        {mutation.isPending ? 'Updating…' : user.isSuspended ? 'Reactivate' : 'Suspend'}
+      </button>
+      {mutation.isError && <ErrorNotice error={mutation.error} />}
+      {mutation.isSuccess && <span className="muted small">{mutation.data.isSuspended ? 'Suspended' : 'Reactivated'}</span>}
+    </div>
   );
 }
 
