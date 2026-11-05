@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -58,6 +59,20 @@ export class WritingAuthGuard
       throw new UnauthorizedException(
         'Invalid or expired authentication token.',
       );
+    }
+
+    const { data: profile, error: profileError } = await this.database
+      .getClient()
+      .from('profiles')
+      .select('is_suspended')
+      .eq('id', data.user.id)
+      .maybeSingle();
+
+    if (profileError || !profile) {
+      throw new ForbiddenException('Unable to verify account status.');
+    }
+    if (profile.is_suspended === true) {
+      throw new ForbiddenException('This account has been suspended.');
     }
 
     request.user = data.user;
