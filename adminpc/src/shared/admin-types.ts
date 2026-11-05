@@ -31,6 +31,9 @@ export interface AdminUser {
   isPublic: boolean | null;
   createdAt: string | null;
   avatarUrl: string | null;
+  isSuspended: boolean;
+  suspendedAt: string | null;
+  suspensionReason: string | null;
 }
 
 export interface AdminUsersResponse {
@@ -72,4 +75,13 @@ export interface AdminUserDetailsResponse {
   activity: AdminUserActivityItem[];
   roleChanges: AdminUserRoleAuditItem[];
   activityLimit: number;
+}
+
+
+export interface AdminUserSuspensionResponse {
+  userId: string;
+  isSuspended: boolean;
+  suspendedAt: string | null;
+  suspensionReason: string | null;
+  changedAt: string;
 }
