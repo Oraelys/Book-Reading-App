@@ -5,9 +5,9 @@ release/
 # Environment files are never committed. Only the example is tracked.
 .env
 .env.*
-.env.example
 .env.local
 .env.staging
 .env.development
 .env.production
 *.log
+!.env.example
