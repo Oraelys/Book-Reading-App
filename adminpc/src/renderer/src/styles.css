@@ -413,6 +413,7 @@ code {
 }
 
 .main {
+  grid-column: 2;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -429,6 +430,18 @@ code {
   min-height: 0;
   padding: 22px 28px 48px;
   overflow-y: auto;
+}
+
+/* Keep the reopen control visible above the page when the sidebar is collapsed. */
+.floating-top {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 10;
+}
+
+.content.content-collapsed {
+  padding-top: 64px;
 }
 
 
