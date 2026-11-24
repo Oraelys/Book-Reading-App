@@ -365,9 +365,10 @@ code {
   --sidebar-w: 288px;
   display: grid;
   flex: 1;
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  grid-template-columns: minmax(0, var(--sidebar-w)) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   min-width: 0;
+  min-height: 0;
   padding: 10px 10px 10px 0;
   border: 0;
   border-radius: var(--r-panel);
@@ -383,6 +384,7 @@ code {
 /* the secondary nav sits straight on the dark container (no card of its own) */
 .sidebar {
   display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
   padding: 6px 12px 6px 18px;
@@ -402,10 +404,12 @@ code {
 /* fixed width so the contents slide away instead of re-wrapping while the column shrinks */
 .sidebar-inner {
   display: flex;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   flex-direction: column;
-  width: calc(var(--sidebar-w) - 30px);
+  width: 100%;
+  min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 .main {
