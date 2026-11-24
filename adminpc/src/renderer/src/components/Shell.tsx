@@ -90,8 +90,7 @@ export function Shell() {
       </aside>
 
       <div className={`panel${collapsed ? ' collapsed' : ''}`}>
-        {!collapsed && (
-          <aside className="sidebar">
+        <aside className="sidebar">
             <div className="sidebar-top">
               <button className="icon-btn no-drag" onClick={toggle} aria-label="Hide sidebar" title="Hide sidebar">
                 <Icon name="panel" size={16} />
@@ -140,8 +139,7 @@ export function Shell() {
               <input type="search" placeholder="Search" value={libraryQuery} onChange={(e) => setLibraryQuery(e.target.value)} aria-label="Search library" />
             </label>
             <LibraryTree books={books} query={libraryQuery} />
-          </aside>
-        )}
+        </aside>
 
         <main className="main">
           {collapsed && (
